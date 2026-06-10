@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arc Agent Forge — Register AI Agents On-chain (ERC-8004)</title>
+<meta name="description" content="Mint an on-chain identity for your AI agent on Arc Testnet in 3 clicks. ERC-8004 identity, reputation & validation — no private keys, just MetaMask."/>
+<meta property="og:title" content="Arc Agent Forge — ERC-8004 Agent Registry UI"/>
+<meta property="og:description" content="Register AI agents with on-chain identity on Arc Testnet. MetaMask only, no private keys."/>
+<style>
+  :root{--bg:#0d0905;--card:#161009;--line:#2e2013;--ink:#f5ece0;--mut:#a08c72;--acc:#ff9f2e;--acc2:#ffd166;--bad:#ff7066;--ok:#6fe3a5;}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;
+    background:radial-gradient(800px 420px at 85% -5%,#3a2208 0%,transparent 60%),
+               radial-gradient(600px 380px at -5% 40%,#2a1606 0%,transparent 55%),var(--bg);}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 16px 70px;}
+  header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:8px;}
+  .brand{display:flex;gap:12px;align-items:center;}
+  .anvil{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;
+    background:linear-gradient(135deg,#4a2c0a,#2e1c08);border:1px solid var(--line);animation:glow 2.4s ease-in-out infinite;}
+  @keyframes glow{0%,100%{box-shadow:0 0 6px rgba(255,159,46,.25)}50%{box-shadow:0 0 22px rgba(255,159,46,.55)}}
+  h1{font-size:21px;margin:0;}
+  h1 b{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:12px;color:var(--mut);margin-top:2px;}
+  .pill{font-size:11px;border:1px solid var(--line);background:var(--card);color:var(--mut);border-radius:999px;padding:7px 13px;cursor:pointer;}
+  .pill.lit{color:var(--ok);border-color:#2a4a35;}
+  .intro{font-size:13px;color:var(--mut);line-height:1.6;margin:14px 0 22px;}
+  .intro b{color:var(--ink);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:14px;}
+  h2{font-size:15px;margin:0 0 6px;display:flex;align-items:center;gap:8px;}
+  .step{font-size:10px;background:#2e1c08;color:var(--acc);border:1px solid #4a2c0a;border-radius:6px;padding:2px 7px;font-weight:700;}
+  .note{font-size:12px;color:var(--mut);line-height:1.55;margin:0 0 14px;}
+  label{display:block;font-size:11.5px;color:var(--mut);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.05em;}
+  input,textarea,select{width:100%;background:#0d0905;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14px;font-family:inherit;}
+  textarea{resize:vertical;min-height:60px;}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--acc);}
+  button{border:none;border-radius:11px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;
+    background:linear-gradient(135deg,#e07b00,#ffb13d);color:#1c0f02;}
+  button.ghost{background:var(--card);border:1px solid var(--line);color:var(--mut);font-weight:400;}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  .status{font-size:13px;min-height:18px;margin:10px 0 0;color:var(--acc2);}
+  .status.err{color:var(--bad);} .status a{color:var(--acc);}
+  .agent{display:flex;align-items:center;gap:14px;background:#0d0905;border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:9px;}
+  .aid{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#3a2208,#241404);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--acc);font-size:15px;flex-shrink:0;border:1px solid #4a2c0a;}
+  .agent .meta{flex:1;min-width:0;}
+  .agent .meta b{display:block;font-size:14px;}
+  .agent .meta span{font-size:11.5px;color:var(--mut);}
+  .agent a{color:var(--acc);font-size:12px;text-decoration:none;flex-shrink:0;}
+  .empty{font-size:12.5px;color:var(--mut);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;} .row>*{flex:1;min-width:140px;}
+  footer{text-align:center;font-size:12px;color:var(--mut);margin-top:28px;line-height:1.9;}
+  footer a{color:var(--acc);text-decoration:none;}
+  code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12px;color:var(--acc2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="anvil">⚒️</div>
+      <div>
+        <h1>Arc <b>Agent Forge</b></h1>
+        <div class="sub">Mint on-chain identities for AI agents · ERC-8004 · Arc Testnet</div>
+      </div>
+    </div>
+    <span class="pill" id="connPill" onclick="connect()">Connect MetaMask</span>
+  </header>
+
+  <p class="intro">Every AI agent needs an identity it can prove. <b>ERC-8004</b> gives agents an on-chain passport: an identity NFT, a reputation ledger, and third-party validation — all on Arc, Circle's USDC-native L1. Forge yours in three clicks. <b>No private keys, no backend</b> — your wallet signs everything.</p>
+
+  <section class="card">
+    <h2><span class="step">STEP 1</span> Forge your agent</h2>
+    <p class="note">Metadata is packed into the token URI itself (data-URI) — no IPFS account needed. Registration mints an ERC-721 identity NFT to your wallet via the official <code>IdentityRegistry</code>.</p>
+    <label>Agent name</label>
+    <input id="aName" placeholder="Dönay's Research Agent v1.0" maxlength="60"/>
+    <label>Description</label>
+    <textarea id="aDesc" placeholder="Autonomous agent that monitors Arc ecosystem activity and reports findings." maxlength="240"></textarea>
+    <div class="row">
+      <div>
+        <label>Agent type</label>
+        <select id="aType">
+          <option value="research">research</option>
+          <option value="trading">trading</option>
+          <option value="assistant">assistant</option>
+          <option value="monitoring">monitoring</option>
+          <option value="creative">creative</option>
+        </select>
+      </div>
+      <div>
+        <label>Capabilities (comma separated)</label>
+        <input id="aCaps" placeholder="data_analysis, reporting"/>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="regBtn" onclick="registerAgent()">⚒️ Register on-chain</button>
+      <button class="ghost" onclick="previewMeta()">Preview metadata</button>
+    </div>
+    <div class="status" id="regStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">STEP 2</span> Your agents</h2>
+    <p class="note">Identity NFTs owned by the connected wallet, read live from ArcScan.</p>
+    <div id="agentList"><p class="empty">Connect your wallet to load your agents.</p></div>
+    <button class="ghost" onclick="loadAgents()" id="loadBtn" style="margin-top:6px;">↻ Refresh</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">STEP 3</span> Give reputation <span style="font-size:10px;color:var(--mut);font-weight:400;">(optional · needs a second account)</span></h2>
+    <p class="note">Per ERC-8004, an agent's <b>owner cannot rate their own agent</b> — switch MetaMask to a different account (with a little gas USDC), then record feedback on the <code>ReputationRegistry</code>.</p>
+    <div class="row">
+      <div>
+        <label>Agent ID</label>
+        <input id="rId" placeholder="e.g. 42" inputmode="numeric"/>
+      </div>
+      <div>
+        <label>Score (0–100)</label>
+        <input id="rScore" placeholder="95" inputmode="numeric"/>
+      </div>
+      <div>
+        <label>Tag</label>
+        <input id="rTag" placeholder="successful_task"/>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <button onclick="giveRep()" id="repBtn">⭐ Record feedback on-chain</button>
+    </div>
+    <div class="status" id="repStatus"></div>
+  </section>
+
+  <footer>
+    Built by <a href="https://x.com/Dnyelfy" target="_blank" rel="noreferrer">@Dnyelfy</a> · ERC-8004 on Arc Testnet · IdentityRegistry <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">0x8004A8…BD9e</a><br/>
+    More tools → <a href="https://arc-wallet-check.vercel.app" target="_blank" rel="noreferrer">⚡ Wallet Check</a> · <a href="https://arcvote-one.vercel.app/arc-dapp.html" target="_blank" rel="noreferrer">☀️ Quest Hub</a>
+  </footer>
+</div>
+
+<script type="module">
+import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes } from "https://esm.sh/ethers@6.13.4";
+
+const CHAIN_HEX = "0x4cef52"; // 5042002
+const RPC = "https://rpc.testnet.arc.network";
+const EXPLORER = "https://testnet.arcscan.app";
+const BS = "https://testnet.arcscan.app/api/v2";
+const IDENTITY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+const REPUTATION = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
+
+const ID_ABI = [
+  "function register(string metadataURI)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+];
+const REP_ABI = [
+  "function giveFeedback(uint256 agentId, int128 score, uint8 feedbackType, string tag, string metadataURI, string evidenceURI, string comment, bytes32 feedbackHash)"
+];
+
+let provider = null, signer = null, user = "";
+const $ = (id) => document.getElementById(id);
+const set = (id, msg, err=false, link=null) => {
+  const el = $(id); el.className = "status" + (err ? " err" : "");
+  el.textContent = msg;
+  if (link) { const a = document.createElement("a"); a.href = link; a.target = "_blank"; a.rel="noreferrer"; a.textContent = " view tx ↗"; el.appendChild(a); }
+};
+
+async function ensureChain(eth) {
+  try { await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] }); }
+  catch (e) {
+    if (e && e.code === 4902) {
+      await eth.request({ method: "wallet_addEthereumChain", params: [{
+        chainId: CHAIN_HEX, chainName: "Arc Testnet",
+        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+        rpcUrls: [RPC], blockExplorerUrls: [EXPLORER] }]});
+    } else throw e;
+  }
+}
+
+async function connect() {
+  const eth = window.ethereum;
+  if (!eth) { set("regStatus", "MetaMask not found.", true); return; }
+  try {
+    const [a] = await eth.request({ method: "eth_requestAccounts" });
+    await ensureChain(eth);
+    provider = new BrowserProvider(eth);
+    signer = await provider.getSigner();
+    user = a;
+    const pill = $("connPill");
+    pill.textContent = a.slice(0,6) + "…" + a.slice(-4) + " · Arc";
+    pill.classList.add("lit");
+    loadAgents();
+  } catch (e) { set("regStatus", "Connection rejected.", true); }
+}
+window.connect = connect;
+
+function buildMeta() {
+  const name = $("aName").value.trim();
+  const desc = $("aDesc").value.trim();
+  if (!name) return null;
+  const caps = $("aCaps").value.split(",").map(s => s.trim()).filter(Boolean);
+  return {
+    name, description: desc || "AI agent registered via Arc Agent Forge",
+    agent_type: $("aType").value, capabilities: caps.length ? caps : ["general"],
+    version: "1.0.0", forge: "arc-agent-forge", created: new Date().toISOString().slice(0,10)
+  };
+}
+
+window.previewMeta = () => {
+  const m = buildMeta();
+  if (!m) { set("regStatus", "Give your agent a name first.", true); return; }
+  alert(JSON.stringify(m, null, 2));
+};
+
+window.registerAgent = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  const m = buildMeta();
+  if (!m) { set("regStatus", "Give your agent a name first.", true); return; }
+  const uri = "data:application/json;base64," + btoa(unescape(encodeURIComponent(JSON.stringify(m))));
+  const btn = $("regBtn"); btn.disabled = true;
+  try {
+    set("regStatus", "Confirm in MetaMask…");
+    const c = new Contract(IDENTITY, ID_ABI, signer);
+    const tx = await c.register(uri);
+    set("regStatus", "⏳ Forging identity on-chain…");
+    const rc = await tx.wait();
+    // pull tokenId from Transfer event in this receipt
+    const iface = new Interface(ID_ABI);
+    let agentId = null;
+    for (const log of rc.logs) {
+      try { const p = iface.parseLog(log); if (p && p.name === "Transfer") agentId = p.args.tokenId.toString(); } catch {}
+    }
+    set("regStatus", `✓ Agent forged! ID: ${agentId ?? "—"} · "${m.name}" now has an on-chain identity.`, false, `${EXPLORER}/tx/${rc.hash}`);
+    $("rId").value = agentId ?? "";
+    loadAgents();
+  } catch (e) {
+    set("regStatus", "Failed: " + (e.shortMessage || e.message || e).slice(0,90), true);
+  } finally { btn.disabled = false; }
+};
+
+function decodeURIJson(u) {
+  try {
+    if (u.startsWith("data:application/json;base64,")) {
+      return JSON.parse(decodeURIComponent(escape(atob(u.split(",")[1]))));
+    }
+  } catch {}
+  return null;
+}
+
+window.loadAgents = async () => {
+  if (!user) { return; }
+  const el = $("agentList");
+  el.innerHTML = '<p class="empty">Reading ArcScan…</p>';
+  try {
+    const r = await fetch(`${BS}/addresses/${user}/nft?type=ERC-721`);
+    const data = r.ok ? await r.json() : { items: [] };
+    const mine = (data.items || []).filter(t => t.token && t.token.address && t.token.address.toLowerCase() === IDENTITY.toLowerCase());
+    if (!mine.length) { el.innerHTML = '<p class="empty">No agents yet — forge your first one above.</p>'; return; }
+    el.innerHTML = mine.map(t => {
+      const meta = t.metadata || decodeURIJson(t.token_url || "") || {};
+      const name = meta.name || "Unnamed agent";
+      const type = meta.agent_type || "—";
+      return `<div class="agent">
+        <div class="aid">#${t.id}</div>
+        <div class="meta"><b>${String(name).slice(0,48)}</b><span>${type} · ERC-8004 identity</span></div>
+        <a href="${EXPLORER}/token/${IDENTITY}/instance/${t.id}" target="_blank" rel="noreferrer">ArcScan ↗</a>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<p class="empty">Could not load agents: ' + (e.message || "") + '</p>';
+  }
+};
+
+window.giveRep = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  const id = $("rId").value.trim();
+  const score = parseInt($("rScore").value.trim() || "95");
+  const tag = $("rTag").value.trim() || "successful_task";
+  if (!/^\d+$/.test(id)) { set("repStatus", "Enter a valid Agent ID.", true); return; }
+  if (!(score >= 0 && score <= 100)) { set("repStatus", "Score must be 0–100.", true); return; }
+  const btn = $("repBtn"); btn.disabled = true;
+  try {
+    set("repStatus", "Confirm in MetaMask… (must NOT be the agent's owner)");
+    const c = new Contract(REPUTATION, REP_ABI, signer);
+    const tx = await c.giveFeedback(id, score, 0, tag, "", "", "", keccak256(toUtf8Bytes(tag)));
+    set("repStatus", "⏳ Recording reputation…");
+    const rc = await tx.wait();
+    set("repStatus", `✓ Feedback recorded: agent #${id} scored ${score} ("${tag}").`, false, `${EXPLORER}/tx/${rc.hash}`);
+  } catch (e) {
+    const msg = (e.shortMessage || e.message || "" + e);
+    set("repStatus", "Failed: " + (msg.includes("owner") || msg.includes("revert") ? "owners can't rate their own agent — switch MetaMask account. " : "") + msg.slice(0,80), true);
+  } finally { btn.disabled = false; }
+};
+
+if (window.ethereum) {
+  window.ethereum.on?.("accountsChanged", () => location.reload());
+  window.ethereum.on?.("chainChanged", () => location.reload());
+}
+</script>
+</body>
+</html>
