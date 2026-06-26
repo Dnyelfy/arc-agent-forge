@@ -616,13 +616,22 @@ async function startBridge() {
       }
     }
     if (!msgBytes) throw new Error("MessageSent event not found.");
-    stepsEl.children[1].innerHTML="⏳ Polling attestation (up to 2 min)…";
+    stepsEl.children[1].innerHTML="⏳ Polling attestation (up to 3 min)…";
     setStatus("bridgeStatus","Step 2/3 — Waiting for Circle attestation…");
-    const msgHash=keccak256(msgBytes);
     let attest=null;
-    for (let i=0;i<40;i++) {
+    for (let i=0;i<60;i++) {
       await new Promise(r=>setTimeout(r,5000));
-      try { const res=await fetch(`https://iris-api-sandbox.circle.com/attestations/${msgHash}`); const d=await res.json(); if(d.status==="complete"&&d.attestation){attest=d.attestation;break;} } catch{}
+      try {
+        const srcDomain=toArc?ARC_DOMAIN:SEP_DOMAIN;
+        const res=await fetch(`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${burnRc.hash}`);
+        const d=await res.json();
+        const msg=d.messages?.[0];
+        if (msg && msg.attestation && msg.attestation!=="PENDING") {
+          attest=msg.attestation;
+          if (msg.message) msgBytes=msg.message; // use message bytes from API if available
+          break;
+        }
+      } catch {}
     }
     if (!attest) throw new Error("Attestation timed out.");
     stepsEl.children[1].innerHTML=`<span style="color:var(--ok)">✓</span> Attestation received`;
