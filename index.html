@@ -675,7 +675,14 @@ async function approveJob() {
   $("approveJobBtn").disabled=true;
   try {
     setStatus("settleJobStatus","Confirm in MetaMask… (evaluator role)");
-    const tx=await c.complete(id, "0x", "0x");
+    let tx;
+    // try 3-param signature first, fall back to 1-param
+    try {
+      tx=await c.complete(id, "0x", "0x");
+    } catch(inner) {
+      const c2=new Contract(JOB_ADDR, ["function complete(uint256 jobId)"], signer);
+      tx=await c2.complete(id);
+    }
     setStatus("settleJobStatus","⏳ Releasing payment…");
     const rc=await tx.wait();
     setStatus("settleJobStatus",`✓ Job completed — payment released to provider`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
