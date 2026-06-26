@@ -327,11 +327,11 @@ const MEMO_ABI = ["function memo(address target,bytes data,bytes32 memoId,bytes 
 const JOB_ABI = [
   "function createJob(address provider,address evaluator,uint256 expiredAt,string description,address hook) returns (uint256)",
   "function setBudget(uint256 jobId,uint256 amount,bytes optParams)",
-  "function fund(uint256 jobId,uint256 expectedBudget)",
+  "function fund(uint256 jobId,bytes optParams)",
   "function submit(uint256 jobId,bytes deliverable,bytes optParams)",
-  "function complete(uint256 jobId)",
-  "function reject(uint256 jobId)",
-  "event JobCreated(uint256 indexed jobId,address indexed client,address indexed provider,address evaluator)"
+  "function complete(uint256 jobId,bytes reason,bytes optParams)",
+  "function reject(uint256 jobId,bytes reason,bytes optParams)",
+  "event JobCreated(uint256 indexed jobId,address indexed client,address indexed provider,address evaluator,uint256 expiredAt,address hook)"
 ];
 
 let provider = null, signer = null, user = "";
@@ -643,7 +643,7 @@ async function fundJob() {
     const usdc=new Contract(USDC_ARC,ERC20_ABI,signer);
     await (await usdc.approve(JOB_ADDR, amount)).wait();
     setStatus("fundJobStatus","Step 2/2 — Confirm fund in MetaMask…");
-    const tx=await c.fund(id, amount);
+    const tx=await c.fund(id, "0x");
     setStatus("fundJobStatus","⏳ Escrowing funds…");
     const rc=await tx.wait();
     setStatus("fundJobStatus",`✓ Funded ${amt} USDC into escrow (Funded)`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
@@ -675,7 +675,7 @@ async function approveJob() {
   $("approveJobBtn").disabled=true;
   try {
     setStatus("settleJobStatus","Confirm in MetaMask… (evaluator role)");
-    const tx=await c.complete(id);
+    const tx=await c.complete(id, "0x", "0x");
     setStatus("settleJobStatus","⏳ Releasing payment…");
     const rc=await tx.wait();
     setStatus("settleJobStatus",`✓ Job completed — payment released to provider`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
@@ -691,7 +691,7 @@ async function rejectJob() {
   $("rejectJobBtn").disabled=true;
   try {
     setStatus("settleJobStatus","Confirm in MetaMask… (evaluator role)");
-    const tx=await c.reject(id);
+    const tx=await c.reject(id, "0x", "0x");
     setStatus("settleJobStatus","⏳ Refunding client…");
     const rc=await tx.wait();
     setStatus("settleJobStatus",`✓ Job rejected — funds refunded to client`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
