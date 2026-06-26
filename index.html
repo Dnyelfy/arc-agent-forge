@@ -207,12 +207,23 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <div id="bridgeNetworkNote" style="font-size:12px;color:var(--mut);margin-top:10px;padding:10px;background:#0d0905;border:1px solid var(--line);border-radius:8px;">
       ⚠️ Make sure MetaMask is on <b>Sepolia</b> to initiate a Sepolia → Arc bridge.
     </div>
-    <div style="margin-top:14px;">
-      <button class="blue" id="bridgeBtn">🌉 Start bridge</button>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="blue" id="bridgeBtn">🔥 Step 1 — Burn</button>
     </div>
     <div class="status" id="bridgeStatus"></div>
+
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+      <label>Step 2 — Mint on destination</label>
+      <p class="note" style="margin-top:6px;">Paste your burn tx hash (auto-filled after Step 1). Attestation can take 1–15 min on testnet — come back anytime and click below. No need to wait on this page.</p>
+      <input id="mintTxHash" placeholder="0x… burn transaction hash"/>
+      <div style="margin-top:10px;">
+        <button class="green" id="mintBtn">✅ Check attestation & Mint</button>
+      </div>
+      <div class="status" id="mintStatus"></div>
+    </div>
+
     <div id="bridgeTracker" style="display:none;margin-top:16px;">
-      <div style="font-size:12px;color:var(--mut);margin-bottom:8px;">Bridge progress</div>
+      <div style="font-size:12px;color:var(--mut);margin-bottom:8px;">Progress</div>
       <div id="bridgeSteps" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
   </section>
@@ -569,7 +580,7 @@ async function startBridge() {
   $("bridgeBtn").disabled=true;
   const tracker=$("bridgeTracker"), stepsEl=$("bridgeSteps");
   tracker.style.display="block";
-  stepsEl.innerHTML=["Approve & burn USDC","Waiting for attestation","Mint on destination"].map(s=>`<div style="font-size:12px;padding:8px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);">⌛ ${s}</div>`).join("");
+  stepsEl.innerHTML=`<div style="font-size:12px;padding:8px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);">⌛ Burning USDC…</div>`;
   const toArc=dir==="to-arc";
   try {
     setStatus("bridgeStatus","Switching chain…");
@@ -577,81 +588,63 @@ async function startBridge() {
     provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
     const srcUsdc=toArc?USDC_SEP:USDC_ARC, srcMsg=toArc?SEP_MESSENGER:ARC_MESSENGER, dstDomain=toArc?ARC_DOMAIN:SEP_DOMAIN;
     const amount=parseUnits(amt,6);
-    stepsEl.children[0].innerHTML="⏳ Approving USDC…";
-    setStatus("bridgeStatus","Step 1/3 — Approve in MetaMask…");
+    stepsEl.innerHTML=`<div style="font-size:12px;padding:8px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);">⏳ Approving USDC…</div>`;
+    setStatus("bridgeStatus","Approve in MetaMask…");
     const usdc=new Contract(srcUsdc,ERC20_ABI,signer);
     await (await usdc.approve(srcMsg,amount)).wait();
-    stepsEl.children[0].innerHTML="⏳ Burning USDC…";
-    setStatus("bridgeStatus","Step 1/3 — Confirm burn in MetaMask…");
+    stepsEl.innerHTML=`<div style="font-size:12px;padding:8px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);">⏳ Confirm burn in MetaMask…</div>`;
+    setStatus("bridgeStatus","Confirm burn in MetaMask…");
     const messenger=new Contract(srcMsg,TM_ABI,signer);
     const mintRecipient=zeroPadValue(dest,32);
-    const burnTx=await messenger.depositForBurn(
-      amount,
-      dstDomain,
-      mintRecipient,
-      srcUsdc,
-      "0x0000000000000000000000000000000000000000000000000000000000000000", // destinationCaller = any
-      0n, // maxFee = 0 for standard transfer
-      1000 // minFinalityThreshold
-    );
+    const burnTx=await messenger.depositForBurn(amount,dstDomain,mintRecipient,srcUsdc,"0x0000000000000000000000000000000000000000000000000000000000000000",0n,1000);
     const burnRc=await burnTx.wait();
     const burnUrl=(toArc?"https://sepolia.etherscan.io":ARC_EXPLORER)+"/tx/"+burnRc.hash;
-    stepsEl.children[0].innerHTML=`<span style="color:var(--ok)">✓</span> Burned ${amt} USDC · <a href="${burnUrl}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
-    const srcTransmit=toArc?SEP_TRANSMIT:ARC_TRANSMIT;
-    const mtIface=new Interface(MT_ABI);
-    let msgBytes=null;
-    for (const log of burnRc.logs) {
-      try {
-        // MessageSent comes from MessageTransmitter, not TokenMessenger
-        if (log.address.toLowerCase()===srcTransmit.toLowerCase()) {
-          const p=mtIface.parseLog(log);
-          if(p?.name==="MessageSent"){msgBytes=p.args.message;break;}
-        }
-      } catch{}
+    stepsEl.innerHTML=`<div style="font-size:12px;padding:10px;background:#0d0905;border:1px solid #1a4a2c;border-radius:8px;color:var(--ok);"><b>✓ Burned ${amt} USDC</b> · <a href="${burnUrl}" target="_blank" style="color:var(--acc)">tx ↗</a></div>`;
+    // auto-fill mint tx hash + remember direction
+    $("mintTxHash").value=burnRc.hash;
+    window._bridgeDir=dir;
+    setStatus("bridgeStatus",`✓ Step 1 done. Burn tx saved below. Wait 1–15 min, then click "Check attestation & Mint".`);
+  } catch(e) { setStatus("bridgeStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,120),true); }
+  finally { $("bridgeBtn").disabled=false; }
+}
+
+async function checkAndMint() {
+  if (!signer) { await connect(); if (!signer) return; }
+  const txHash=$("mintTxHash").value.trim();
+  if (!txHash.startsWith("0x")||txHash.length!==66) { setStatus("mintStatus","Paste a valid burn tx hash.",true); return; }
+  // determine direction: from stored value or current dropdown
+  const dir=window._bridgeDir||$("bridgeDir").value;
+  const toArc=dir==="to-arc";
+  const srcDomain=toArc?ARC_DOMAIN:SEP_DOMAIN; // source is where burn happened
+  $("mintBtn").disabled=true;
+  try {
+    setStatus("mintStatus","Checking attestation…");
+    const res=await fetch(`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${txHash}`);
+    if (res.status===404) { setStatus("mintStatus","Not indexed yet by Circle. Wait a few minutes and try again.",true); return; }
+    if (!res.ok) { setStatus("mintStatus","API error "+res.status+". Try again shortly.",true); return; }
+    const d=await res.json();
+    const msg=d.messages?.[0];
+    if (!msg) { setStatus("mintStatus","No message found for this tx yet. Wait and retry.",true); return; }
+    if (msg.status!=="complete"||!msg.attestation||msg.attestation==="PENDING") {
+      setStatus("mintStatus",`Attestation status: ${msg.status}. Not ready yet — try again in a minute.`,true); return;
     }
-    // fallback: try all logs
-    if (!msgBytes) {
-      for (const log of burnRc.logs) {
-        try { const p=mtIface.parseLog(log); if(p?.name==="MessageSent"){msgBytes=p.args.message;break;} } catch{}
-      }
-    }
-    if (!msgBytes) throw new Error("MessageSent event not found.");
-    stepsEl.children[1].innerHTML="⏳ Polling attestation…";
-    setStatus("bridgeStatus","Step 2/3 — Waiting for Circle attestation…");
-    let attest=null;
-    let lastErr="";
-    for (let i=0;i<60;i++) {
-      await new Promise(r=>setTimeout(r,5000));
-      try {
-        const srcDomain=toArc?ARC_DOMAIN:SEP_DOMAIN;
-        const res=await fetch(`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${burnRc.hash}`);
-        if (!res.ok) { lastErr="API "+res.status; stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, ${lastErr})`; continue; }
-        const d=await res.json();
-        const msg=d.messages?.[0];
-        stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, status: ${msg?.status||"none"})`;
-        if (msg && msg.status==="complete" && msg.attestation && msg.attestation!=="PENDING") {
-          attest=msg.attestation;
-          if (msg.message) msgBytes=msg.message;
-          break;
-        }
-      } catch(err) { lastErr=err.message||"fetch error"; stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, ${lastErr})`; }
-    }
-    if (!attest) throw new Error("Attestation timed out. "+lastErr);
-    stepsEl.children[1].innerHTML=`<span style="color:var(--ok)">✓</span> Attestation received`;
-    stepsEl.children[2].innerHTML="⏳ Confirm mint in MetaMask…";
-    setStatus("bridgeStatus","Step 3/3 — Switching to destination chain…");
+    // Ready — mint on destination
+    setStatus("mintStatus","✓ Attestation ready. Switching to destination chain…");
     if (toArc) await ensureArc(); else await ensureSep();
     provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
     const dstTransmit=toArc?ARC_TRANSMIT:SEP_TRANSMIT;
     const transmitter=new Contract(dstTransmit,MT_ABI,signer);
-    const mintTx=await transmitter.receiveMessage(msgBytes,attest);
+    setStatus("mintStatus","Confirm mint in MetaMask…");
+    const mintTx=await transmitter.receiveMessage(msg.message,msg.attestation);
     const mintRc=await mintTx.wait();
     const mintUrl=(toArc?ARC_EXPLORER:"https://sepolia.etherscan.io")+"/tx/"+mintRc.hash;
-    stepsEl.children[2].innerHTML=`<span style="color:var(--ok)">✓</span> Minted ${amt} USDC · <a href="${mintUrl}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
-    setStatus("bridgeStatus",`✓ Bridge complete! ${amt} USDC delivered to ${dest.slice(0,8)}…`);
+    setStatus("mintStatus","✓ Mint complete! USDC delivered.",false,mintUrl);
     loadBalances();
-  } catch(e) { setStatus("bridgeStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,120),true); }
-  finally { $("bridgeBtn").disabled=false; }
+  } catch(e) {
+    const m=(e.shortMessage||e.message||""+e);
+    if (m.includes("already")||m.includes("used")) setStatus("mintStatus","This message was already minted.",true);
+    else setStatus("mintStatus","Failed: "+m.slice(0,120),true);
+  } finally { $("mintBtn").disabled=false; }
 }
 
 // ── EURC SWAP ─────────────────────────────────────────────────
@@ -685,6 +678,7 @@ $("repBtn").addEventListener("click", giveRep);
 $("transferBtn").addEventListener("click", sendTransfer);
 $("refreshBalBtn").addEventListener("click", loadBalances);
 $("bridgeBtn").addEventListener("click", startBridge);
+$("mintBtn").addEventListener("click", checkAndMint);
 $("bridgeDir").addEventListener("change", updateBridgeDir);
 $("swapBtn").addEventListener("click", doSwap);
 $("swapDir").addEventListener("change", updateSwapRate);
