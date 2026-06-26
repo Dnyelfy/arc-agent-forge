@@ -328,7 +328,7 @@ const JOB_ABI = [
   "function createJob(address provider,address evaluator,uint256 expiredAt,string description,address hook) returns (uint256)",
   "function setBudget(uint256 jobId,uint256 amount,bytes optParams)",
   "function fund(uint256 jobId,bytes optParams)",
-  "function submit(uint256 jobId,bytes deliverable,bytes optParams)",
+  "function submit(uint256 jobId,bytes32 deliverable,bytes optParams)",
   "function complete(uint256 jobId,bytes reason,bytes optParams)",
   "function reject(uint256 jobId,bytes reason,bytes optParams)",
   "event JobCreated(uint256 indexed jobId,address indexed client,address indexed provider,address evaluator,uint256 expiredAt,address hook)"
@@ -658,7 +658,7 @@ async function submitJob() {
   const c=await jobSigner(); if (!c) return;
   $("submitJobBtn").disabled=true;
   try {
-    const delivBytes="0x"+Array.from(new TextEncoder().encode(deliv)).map(b=>b.toString(16).padStart(2,"0")).join("");
+    const delivBytes=keccak256(toUtf8Bytes(deliv));
     setStatus("submitJobStatus","Confirm in MetaMask… (provider role)");
     const tx=await c.submit(id, delivBytes, "0x");
     setStatus("submitJobStatus","⏳ Submitting deliverable…");
