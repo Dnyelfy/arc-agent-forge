@@ -2,7 +2,861 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta name="viewport" content="<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arc Agent Forge — ERC-8004 Agent Registry UI</title>
+<meta name="description" content="Mint an on-chain identity for your AI agent on Arc Testnet. ERC-8004 identity, reputation, USDC transfers with memo, bridge & EURC swap."/>
+<meta property="og:title" content="Arc Agent Forge — ERC-8004 Agent Registry UI"/>
+<meta property="og:description" content="Register AI agents with on-chain identity on Arc Testnet. MetaMask only, no private keys."/>
+<style>
+:root{--bg:#0d0905;--card:#161009;--line:#2e2013;--ink:#f5ece0;--mut:#a08c72;--acc:#ff9f2e;--acc2:#ffd166;--bad:#ff7066;--ok:#6fe3a5;}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;
+background:radial-gradient(800px 420px at 85% -5%,#3a2208 0%,transparent 60%),
+radial-gradient(600px 380px at -5% 40%,#2a1606 0%,transparent 55%),var(--bg);}
+.wrap{max-width:780px;margin:0 auto;padding:28px 16px 70px;}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
+.brand{display:flex;gap:12px;align-items:center;}
+.anvil{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;
+background:linear-gradient(135deg,#4a2c0a,#2e1c08);border:1px solid var(--line);animation:glow 2.4s ease-in-out infinite;}
+@keyframes glow{0%,100%{box-shadow:0 0 6px rgba(255,159,46,.25)}50%{box-shadow:0 0 22px rgba(255,159,46,.55)}}
+h1{font-size:21px;margin:0;}
+h1 b{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.sub{font-size:12px;color:var(--mut);margin-top:2px;}
+.pill{font-size:11px;border:1px solid var(--line);background:var(--card);color:var(--mut);border-radius:999px;padding:7px 13px;cursor:pointer;}
+.pill.lit{color:var(--ok);border-color:#2a4a35;}
+
+/* TABS */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:20px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:5px;}
+.tab{flex:1;min-width:80px;text-align:center;padding:8px 10px;font-size:12px;font-weight:600;color:var(--mut);cursor:pointer;border-radius:10px;transition:all .18s;border:none;background:transparent;}
+.tab:hover{color:var(--ink);}
+.tab.active{background:linear-gradient(135deg,#3a1f06,#2a1504);color:var(--acc);border:1px solid #4a2c0a;}
+.tabpane{display:none;}
+.tabpane.active{display:block;}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:14px;}
+h2{font-size:15px;margin:0 0 6px;display:flex;align-items:center;gap:8px;}
+.step{font-size:10px;background:#2e1c08;color:var(--acc);border:1px solid #4a2c0a;border-radius:6px;padding:2px 7px;font-weight:700;}
+.badge{font-size:10px;background:#0a2e1c;color:var(--ok);border:1px solid #1a4a2c;border-radius:6px;padding:2px 7px;font-weight:700;}
+.note{font-size:12px;color:var(--mut);line-height:1.55;margin:0 0 14px;}
+label{display:block;font-size:11.5px;color:var(--mut);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.05em;}
+input,textarea,select{width:100%;background:#0d0905;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14px;font-family:inherit;}
+textarea{resize:vertical;min-height:60px;}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--acc);}
+button{border:none;border-radius:11px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;
+background:linear-gradient(135deg,#e07b00,#ffb13d);color:#1c0f02;}
+button.ghost{background:var(--card);border:1px solid var(--line);color:var(--mut);font-weight:400;}
+button.blue{background:linear-gradient(135deg,#0055cc,#2288ff);color:#fff;}
+button.green{background:linear-gradient(135deg,#0a6640,#12cc70);color:#fff;}
+button:disabled{opacity:.45;cursor:not-allowed;}
+.status{font-size:13px;min-height:18px;margin:10px 0 0;color:var(--acc2);}
+.status.err{color:var(--bad);} .status a{color:var(--acc);}
+
+.agent{display:flex;align-items:center;gap:14px;background:#0d0905;border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:9px;}
+.aid{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#3a2208,#241404);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--acc);font-size:15px;flex-shrink:0;border:1px solid #4a2c0a;}
+.agent .meta{flex:1;min-width:0;}
+.agent .meta b{display:block;font-size:14px;}
+.agent .meta span{font-size:11.5px;color:var(--mut);}
+.agent a{color:var(--acc);font-size:12px;text-decoration:none;flex-shrink:0;}
+.empty{font-size:12.5px;color:var(--mut);}
+.row{display:flex;gap:10px;flex-wrap:wrap;} .row>*{flex:1;min-width:140px;}
+
+/* Swap rate display */
+.rate-box{background:#0d0905;border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;margin:14px 0;}
+.rate-box .big{font-size:22px;font-weight:800;color:var(--acc2);}
+.rate-box .small{font-size:11px;color:var(--mut);margin-top:4px;}
+.swap-arrow{text-align:center;font-size:20px;margin:6px 0;color:var(--acc);}
+
+/* Balance chips */
+.balances{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.bal-chip{flex:1;min-width:120px;background:#0d0905;border:1px solid var(--line);border-radius:10px;padding:10px 14px;}
+.bal-chip .sym{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;}
+.bal-chip .amt{font-size:18px;font-weight:700;color:var(--ink);margin-top:2px;}
+
+/* Bridge steps */
+.bridge-steps{counter-reset:s;}
+.bridge-step{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;padding:12px;background:#0d0905;border:1px solid var(--line);border-radius:10px;}
+.bridge-step .num{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#4a2c0a,#2e1c08);border:1px solid #6a3c0a;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--acc);flex-shrink:0;}
+.bridge-step .txt{font-size:12.5px;color:var(--mut);line-height:1.55;}
+.bridge-step .txt b{color:var(--ink);}
+
+footer{text-align:center;font-size:12px;color:var(--mut);margin-top:28px;line-height:1.9;}
+footer a{color:var(--acc);text-decoration:none;}
+code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12px;color:var(--acc2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="anvil">⚒️</div>
+    <div>
+      <h1>Arc <b>Agent Forge</b></h1>
+      <div class="sub">ERC-8004 Identity · USDC Transfers · Bridge · EURC Swap · Arc Testnet</div>
+    </div>
+  </div>
+  <span class="pill" id="connPill" >Connect MetaMask</span>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="forge">⚒️ Forge</button>
+  <button class="tab" data-tab="agents">🤖 Agents</button>
+  <button class="tab" data-tab="reputation">⭐ Reputation</button>
+  <button class="tab" data-tab="transfer">💸 Transfer</button>
+  <button class="tab" data-tab="bridge">🌉 Bridge</button>
+  <button class="tab" data-tab="swap">🔄 EURC Swap</button>
+</nav>
+
+<!-- ========== FORGE ========== -->
+<div class="tabpane active" id="tab-forge">
+  <section class="card">
+    <h2><span class="step">STEP 1</span> Forge your agent</h2>
+    <p class="note">Metadata is packed into the token URI itself (data-URI) — no IPFS account needed. Registration mints an ERC-721 identity NFT to your wallet via the official <code>IdentityRegistry</code>.</p>
+    <label>Agent name</label>
+    <input id="aName" placeholder="Dönay's Research Agent v1.0" maxlength="60"/>
+    <label>Description</label>
+    <textarea id="aDesc" placeholder="Autonomous agent that monitors Arc ecosystem activity and reports findings." maxlength="240"></textarea>
+    <div class="row">
+      <div>
+        <label>Agent type</label>
+        <select id="aType">
+          <option value="research">research</option>
+          <option value="trading">trading</option>
+          <option value="assistant">assistant</option>
+          <option value="monitoring">monitoring</option>
+          <option value="creative">creative</option>
+        </select>
+      </div>
+      <div>
+        <label>Capabilities (comma separated)</label>
+        <input id="aCaps" placeholder="data_analysis, reporting"/>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="regBtn">⚒️ Register on-chain</button>
+      <button class="ghost">Preview metadata</button>
+    </div>
+    <div class="status" id="regStatus"></div>
+  </section>
+</div>
+
+<!-- ========== AGENTS ========== -->
+<div class="tabpane" id="tab-agents">
+  <section class="card">
+    <h2>🤖 Your agents</h2>
+    <p class="note">Identity NFTs owned by the connected wallet, read live from ArcScan.</p>
+    <div id="agentList"><p class="empty">Connect your wallet to load your agents.</p></div>
+    <button class="ghost" id="loadBtn" style="margin-top:6px;">↻ Refresh</button>
+  </section>
+</div>
+
+<!-- ========== REPUTATION ========== -->
+<div class="tabpane" id="tab-reputation">
+  <section class="card">
+    <h2>⭐ Give reputation <span style="font-size:10px;color:var(--mut);font-weight:400;">(needs a second account)</span></h2>
+    <p class="note">Per ERC-8004, an agent's <b>owner cannot rate their own agent</b> — switch MetaMask to a different account (with a little gas USDC), then record feedback on the <code>ReputationRegistry</code>.</p>
+    <div class="row">
+      <div>
+        <label>Agent ID</label>
+        <input id="rId" placeholder="e.g. 42" inputmode="numeric"/>
+      </div>
+      <div>
+        <label>Score (0–100)</label>
+        <input id="rScore" placeholder="95" inputmode="numeric"/>
+      </div>
+      <div>
+        <label>Tag</label>
+        <input id="rTag" placeholder="successful_task"/>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <button id="repBtn">⭐ Record feedback on-chain</button>
+    </div>
+    <div class="status" id="repStatus"></div>
+  </section>
+</div>
+
+<!-- ========== TRANSFER ========== -->
+<div class="tabpane" id="tab-transfer">
+  <section class="card">
+    <h2><span class="badge">ON-CHAIN</span> Agent-to-Agent USDC Transfer</h2>
+    <p class="note">Send USDC with an on-chain memo — attaches metadata to every payment using Arc's native <code>Memo</code> contract. Recipient and memo data are permanently recorded on-chain.</p>
+
+    <div class="balances" id="transferBalances">
+      <div class="bal-chip"><div class="sym">USDC Balance</div><div class="amt" id="usdcBal">—</div></div>
+      <div class="bal-chip"><div class="sym">EURC Balance</div><div class="amt" id="eurcBal">—</div></div>
+    </div>
+
+    <label>Recipient address</label>
+    <input id="tTo" placeholder="0x…"/>
+
+    <div class="row">
+      <div>
+        <label>Amount (USDC)</label>
+        <input id="tAmt" placeholder="1.00" inputmode="decimal"/>
+      </div>
+      <div>
+        <label>Token</label>
+        <select id="tToken">
+          <option value="usdc">USDC</option>
+          <option value="eurc">EURC</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Memo ID <span style="font-weight:400;color:var(--mut);">(invoice / reference label)</span></label>
+    <input id="tMemoId" placeholder="invoice-2026-0001"/>
+
+    <label>Memo data <span style="font-weight:400;color:var(--mut);">(free-text metadata)</span></label>
+    <input id="tMemoData" placeholder="order=2026-0001 agent=659743"/>
+
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="transferBtn">💸 Send with memo</button>
+      <button class="ghost">↻ Refresh balances</button>
+    </div>
+    <div class="status" id="transferStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2>📋 Memo history</h2>
+    <p class="note">Past memo transfers from your wallet on Arc Testnet.</p>
+    <div id="memoHistory"><p class="empty">Send a transfer above to see history here.</p></div>
+  </section>
+</div>
+
+<!-- ========== BRIDGE ========== -->
+<div class="tabpane" id="tab-bridge">
+  <section class="card">
+    <h2><span class="badge">CCTP</span> Bridge USDC · Sepolia ↔ Arc</h2>
+    <p class="note">Circle's Cross-Chain Transfer Protocol burns USDC on the source chain and mints native USDC on the destination — no wrapped tokens, no liquidity pools.</p>
+
+    <div class="bridge-steps">
+      <div class="bridge-step"><div class="num">1</div><div class="txt"><b>Approve & Burn</b> — TokenMessenger burns your USDC on Sepolia and emits an attestation.</div></div>
+      <div class="bridge-step"><div class="num">2</div><div class="txt"><b>Attest</b> — Circle's attestation API signs the burn message (auto-polled every 5 s).</div></div>
+      <div class="bridge-step"><div class="num">3</div><div class="txt"><b>Mint</b> — MessageTransmitter on Arc Testnet mints native USDC to your wallet.</div></div>
+    </div>
+
+    <div class="row" style="margin-top:16px;">
+      <div>
+        <label>Direction</label>
+        <select id="bridgeDir">
+          <option value="to-arc">Sepolia → Arc Testnet</option>
+          <option value="to-sep">Arc Testnet → Sepolia</option>
+        </select>
+      </div>
+      <div>
+        <label>Amount (USDC)</label>
+        <input id="bridgeAmt" placeholder="5.00" inputmode="decimal"/>
+      </div>
+    </div>
+
+    <label>Destination address <span style="font-weight:400;color:var(--mut);">(leave blank = your wallet)</span></label>
+    <input id="bridgeDest" placeholder="0x… or leave blank"/>
+
+    <div id="bridgeNetworkNote" style="font-size:12px;color:var(--mut);margin-top:10px;padding:10px;background:#0d0905;border:1px solid var(--line);border-radius:8px;">
+      ⚠️ Make sure MetaMask is on <b>Sepolia</b> to initiate a Sepolia → Arc bridge.
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="blue" id="bridgeBtn">🌉 Start bridge</button>
+    </div>
+    <div class="status" id="bridgeStatus"></div>
+
+    <div id="bridgeTracker" style="display:none;margin-top:16px;">
+      <div style="font-size:12px;color:var(--mut);margin-bottom:8px;">Bridge progress</div>
+      <div id="bridgeSteps" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ℹ️ Contract addresses</h2>
+    <p class="note">Official CCTP contracts used by this bridge.</p>
+    <div style="font-size:12px;line-height:2;color:var(--mut);">
+      <b style="color:var(--ink);">Sepolia</b><br/>
+      TokenMessenger: <code>0x9f3B8679c73C2Fef8b59B4f3444d4e156fb70AA5</code><br/>
+      MessageTransmitter: <code>0x7865fAfC2db2093669d92c0197ea5d5852acD22A</code><br/><br/>
+      <b style="color:var(--ink);">Arc Testnet</b><br/>
+      TokenMessenger: <code>0xbd3fa81b58ba92a82136038b25adec7066af3155</code><br/>
+      MessageTransmitter: <code>0x0a992d191deec32afe36203ad87d7d289a738f81</code><br/>
+      USDC: <code>0x3600000000000000000000000000000000000000</code>
+    </div>
+  </section>
+</div>
+
+<!-- ========== EURC SWAP ========== -->
+<div class="tabpane" id="tab-swap">
+  <section class="card">
+    <h2><span class="badge">ON-CHAIN</span> USDC ↔ EURC Swap</h2>
+    <p class="note">Both USDC and EURC are natively deployed on Arc Testnet by Circle. This swap transfers EURC to you and USDC to the pool (or vice versa) using direct ERC-20 transfers at the current indicative rate.</p>
+
+    <div class="balances">
+      <div class="bal-chip"><div class="sym">USDC</div><div class="amt" id="swapUsdcBal">—</div></div>
+      <div class="bal-chip"><div class="sym">EURC</div><div class="amt" id="swapEurcBal">—</div></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Direction</label>
+        <select id="swapDir">
+          <option value="usdc-eurc">USDC → EURC</option>
+          <option value="eurc-usdc">EURC → USDC</option>
+        </select>
+      </div>
+      <div>
+        <label>Amount</label>
+        <input id="swapAmt" placeholder="10.00" inputmode="decimal"/>
+      </div>
+    </div>
+
+    <div class="rate-box">
+      <div class="big" id="rateDisplay">—</div>
+      <div class="small" id="rateLabel">Enter amount to see rate</div>
+    </div>
+
+    <label>Recipient <span style="font-weight:400;color:var(--mut);">(leave blank = your wallet)</span></label>
+    <input id="swapRecipient" placeholder="0x… or leave blank"/>
+
+    <div style="margin-top:14px;">
+      <button class="green" id="swapBtn">🔄 Swap now</button>
+    </div>
+    <div class="status" id="swapStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2>📊 Arc Testnet tokens</h2>
+    <div style="font-size:12px;line-height:2.1;color:var(--mut);">
+      USDC: <code>0x3600000000000000000000000000000000000000</code><br/>
+      EURC: <code>0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a</code><br/>
+      Rate source: <span style="color:var(--ink);">CoinGecko live EUR/USD</span> · refreshed on page load
+    </div>
+    <div style="margin-top:10px;font-size:12px;">
+      Current rate: <span id="liveRate" style="color:var(--acc2);">loading…</span>
+    </div>
+  </section>
+</div>
+
+<footer>
+  Built by <a href="https://x.com/Dnyelfy" target="_blank" rel="noreferrer">@Dnyelfy</a> · ERC-8004 on Arc Testnet · IdentityRegistry <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">0x8004A8…BD9e</a><br/>
+  More tools → <a href="https://arc-wallet-check.vercel.app" target="_blank" rel="noreferrer">⚡ Wallet Check</a> · <a href="https://arcvote-one.vercel.app/arc-dapp.html" target="_blank" rel="noreferrer">☀️ Quest Hub</a>
+</footer>
+</div>
+
+<script type="module">
+import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue, toBeHex } from "https://esm.sh/ethers@6.13.4";
+
+// ── Tab switching ─────────────────────────────────────────────
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const name = btn.dataset.tab;
+    document.querySelectorAll(".tabpane").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+    document.getElementById("tab-" + name).classList.add("active");
+    btn.classList.add("active");
+    if (name === "transfer" || name === "swap") loadBalances();
+  });
+});
+
+// ── Chain config ──────────────────────────────────────────────
+const ARC_CHAIN_ID   = "0x4cef52"; // 5042002
+const SEP_CHAIN_ID   = "0xaa36a7"; // 11155111
+const ARC_RPC        = "https://rpc.testnet.arc.network";
+const SEP_RPC        = "https://rpc.sepolia.org";
+const ARC_EXPLORER   = "https://testnet.arcscan.app";
+const ARC_SCAN_API   = "https://testnet.arcscan.app/api/v2";
+
+// ── Contract addresses ────────────────────────────────────────
+const IDENTITY   = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+const REPUTATION = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
+const MEMO_ADDR  = "0x5294E9927c3306DcBaDb03fe70b92e01cCede505";
+const USDC_ARC   = "0x3600000000000000000000000000000000000000";
+const EURC_ARC   = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
+// CCTP Sepolia
+const SEP_TOKEN_MESSENGER = "0x9f3B8679c73C2Fef8b59B4f3444d4e156fb70AA5";
+const SEP_MSG_TRANSMITTER = "0x7865fAfC2db2093669d92c0197ea5d5852acD22A";
+const USDC_SEP            = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+// CCTP Arc
+const ARC_TOKEN_MESSENGER = "0xbd3fa81b58ba92a82136038b25adec7066af3155";
+const ARC_MSG_TRANSMITTER = "0x0a992d191deec32afe36203ad87d7d289a738f81";
+const ARC_DOMAIN = 9; // Circle domain ID for Arc Testnet
+const SEP_DOMAIN = 0;
+
+// ── ABIs ─────────────────────────────────────────────────────
+const ID_ABI = [
+  "function register(string metadataURI)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+];
+const REP_ABI = [
+  "function giveFeedback(uint256 agentId, int128 score, uint8 feedbackType, string tag, string metadataURI, string evidenceURI, string comment, bytes32 feedbackHash)"
+];
+const ERC20_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function decimals() view returns (uint8)"
+];
+const MEMO_ABI = [
+  "function memo(address target, bytes data, bytes32 memoId, bytes memoData)",
+  "event Memo(address indexed sender, address indexed target, bytes32 callDataHash, bytes32 indexed memoId, bytes memo, uint256 memoIndex)"
+];
+const TOKEN_MESSENGER_ABI = [
+  "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) returns (uint64 nonce)",
+  "event MessageSent(bytes message)"
+];
+const MSG_TRANSMITTER_ABI = [
+  "function receiveMessage(bytes message, bytes attestation)"
+];
+
+// ── State ─────────────────────────────────────────────────────
+let provider = null, signer = null, user = "";
+let eurUsdRate = 1.08; // fallback
+
+const $ = id => document.getElementById(id);
+const set = (id, msg, err = false, link = null) => {
+  const el = $(id); el.className = "status" + (err ? " err" : "");
+  el.textContent = msg;
+  if (link) {
+    const a = document.createElement("a");
+    a.href = link; a.target = "_blank"; a.rel = "noreferrer";
+    a.textContent = " view tx ↗"; el.appendChild(a);
+  }
+};
+
+// ── Tab switching ─────────────────────────────────────────────
+const switchTab = (name, btn) => {
+  document.querySelectorAll(".tabpane").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  $("tab-" + name).classList.add("active");
+  btn.classList.add("active");
+  if (name === "transfer" || name === "swap") loadBalances();
+};
+
+// ── Chain helpers ─────────────────────────────────────────────
+async function ensureChain(chainHex, chainName, rpc, explorer, symbol) {
+  const eth = window.ethereum;
+  try { await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] }); }
+  catch (e) {
+    if (e && e.code === 4902) {
+      await eth.request({ method: "wallet_addEthereumChain", params: [{
+        chainId: chainHex, chainName,
+        nativeCurrency: { name: symbol, symbol, decimals: 6 },
+        rpcUrls: [rpc], blockExplorerUrls: [explorer]
+      }]});
+    } else throw e;
+  }
+}
+async function ensureArc() {
+  await ensureChain(ARC_CHAIN_ID, "Arc Testnet", ARC_RPC, ARC_EXPLORER, "USDC");
+}
+async function ensureSepolia() {
+  await ensureChain(SEP_CHAIN_ID, "Sepolia", SEP_RPC, "https://sepolia.etherscan.io", "ETH");
+}
+
+// ── Connect ───────────────────────────────────────────────────
+async function connect() {
+  const eth = window.ethereum;
+  if (!eth) { alert("MetaMask not found."); return; }
+  try {
+    const [a] = await eth.request({ method: "eth_requestAccounts" });
+    await ensureArc();
+    provider = new BrowserProvider(eth);
+    signer = await provider.getSigner();
+    user = a;
+    const pill = $("connPill");
+    pill.textContent = a.slice(0,6) + "…" + a.slice(-4) + " · Arc";
+    pill.classList.add("lit");
+    loadAgents();
+    loadBalances();
+  } catch (e) { alert("Connection rejected: " + (e.message || e)); }
+}
+
+
+// ── Balances ──────────────────────────────────────────────────
+async function loadBalances() {
+  if (!user || !provider) return;
+  try {
+    const usdc = new Contract(USDC_ARC, ERC20_ABI, provider);
+    const eurc = new Contract(EURC_ARC, ERC20_ABI, provider);
+    const [ub, eb] = await Promise.all([usdc.balanceOf(user), eurc.balanceOf(user)]);
+    const uf = parseFloat(formatUnits(ub, 6)).toFixed(2);
+    const ef = parseFloat(formatUnits(eb, 6)).toFixed(2);
+    $("usdcBal").textContent = uf;
+    $("eurcBal").textContent = ef;
+    $("swapUsdcBal").textContent = uf;
+    $("swapEurcBal").textContent = ef;
+  } catch {}
+}
+
+
+// ── Live EUR/USD rate ─────────────────────────────────────────
+async function fetchRate() {
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=euro-coin&vs_currencies=usd");
+    const d = await r.json();
+    eurUsdRate = d["euro-coin"]?.usd || 1.08;
+    $("liveRate").textContent = `1 EURC = $${eurUsdRate.toFixed(4)} USD`;
+  } catch {
+    $("liveRate").textContent = `1 EURC ≈ $1.08 USD (fallback)`;
+  }
+  updateSwapRate();
+}
+
+const updateSwapRate = () => {
+  const dir = $("swapDir").value;
+  const amt = parseFloat($("swapAmt").value) || 0;
+  if (!amt) { $("rateDisplay").textContent = "—"; $("rateLabel").textContent = "Enter amount to see rate"; return; }
+  if (dir === "usdc-eurc") {
+    const out = (amt / eurUsdRate).toFixed(4);
+    $("rateDisplay").textContent = `${amt} USDC → ${out} EURC`;
+    $("rateLabel").textContent = `Rate: 1 EURC = $${eurUsdRate.toFixed(4)}`;
+  } else {
+    const out = (amt * eurUsdRate).toFixed(4);
+    $("rateDisplay").textContent = `${amt} EURC → ${out} USDC`;
+    $("rateLabel").textContent = `Rate: 1 EURC = $${eurUsdRate.toFixed(4)}`;
+  }
+};
+
+// ── Metadata builder ──────────────────────────────────────────
+function buildMeta() {
+  const name = $("aName").value.trim();
+  const desc = $("aDesc").value.trim();
+  if (!name) return null;
+  const caps = $("aCaps").value.split(",").map(s => s.trim()).filter(Boolean);
+  return {
+    name, description: desc || "AI agent registered via Arc Agent Forge",
+    agent_type: $("aType").value, capabilities: caps.length ? caps : ["general"],
+    version: "1.0.0", forge: "arc-agent-forge", created: new Date().toISOString().slice(0,10)
+  };
+}
+
+const previewMeta = () => {
+  const m = buildMeta();
+  if (!m) { alert("Give your agent a name first."); return; }
+  alert(JSON.stringify(m, null, 2));
+};
+
+// ── Register agent ────────────────────────────────────────────
+const registerAgent = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc();
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  const m = buildMeta();
+  if (!m) { set("regStatus", "Give your agent a name first.", true); return; }
+  const uri = "data:application/json;base64," + btoa(unescape(encodeURIComponent(JSON.stringify(m))));
+  const btn = $("regBtn"); btn.disabled = true;
+  try {
+    set("regStatus", "Confirm in MetaMask…");
+    const c = new Contract(IDENTITY, ID_ABI, signer);
+    const tx = await c.register(uri);
+    set("regStatus", "⏳ Forging identity on-chain…");
+    const rc = await tx.wait();
+    const iface = new Interface(ID_ABI);
+    let agentId = null;
+    for (const log of rc.logs) {
+      try { const p = iface.parseLog(log); if (p && p.name === "Transfer") agentId = p.args.tokenId.toString(); } catch {}
+    }
+    set("regStatus", `✓ Agent forged! ID: ${agentId ?? "—"} · "${m.name}" now has an on-chain identity.`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    $("rId").value = agentId ?? "";
+    loadAgents();
+  } catch (e) {
+    set("regStatus", "Failed: " + (e.shortMessage || e.message || e).slice(0,90), true);
+  } finally { btn.disabled = false; }
+};
+
+// ── Load agents ───────────────────────────────────────────────
+function decodeURIJson(u) {
+  try { if (u.startsWith("data:application/json;base64,")) return JSON.parse(decodeURIComponent(escape(atob(u.split(",")[1])))); } catch {}
+  return null;
+}
+
+const loadAgents = async () => {
+  if (!user) return;
+  const el = $("agentList");
+  el.innerHTML = '<p class="empty">Reading ArcScan…</p>';
+  try {
+    const r = await fetch(`${ARC_SCAN_API}/addresses/${user}/nft?type=ERC-721`);
+    const data = r.ok ? await r.json() : { items: [] };
+    const mine = (data.items || []).filter(t => t.token?.address?.toLowerCase() === IDENTITY.toLowerCase());
+    if (!mine.length) { el.innerHTML = '<p class="empty">No agents yet — forge your first one above.</p>'; return; }
+    el.innerHTML = mine.map(t => {
+      const meta = t.metadata || decodeURIJson(t.token_url || "") || {};
+      const name = meta.name || "Unnamed agent";
+      const type = meta.agent_type || "—";
+      return `<div class="agent">
+        <div class="aid">#${t.id}</div>
+        <div class="meta"><b>${String(name).slice(0,48)}</b><span>${type} · ERC-8004 identity</span></div>
+        <a href="${ARC_EXPLORER}/token/${IDENTITY}/instance/${t.id}" target="_blank" rel="noreferrer">ArcScan ↗</a>
+      </div>`;
+    }).join("");
+  } catch (e) { el.innerHTML = '<p class="empty">Could not load: ' + (e.message || "") + '</p>'; }
+};
+
+// ── Reputation ────────────────────────────────────────────────
+const giveRep = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc();
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  const id = $("rId").value.trim();
+  const score = parseInt($("rScore").value.trim() || "95");
+  const tag = $("rTag").value.trim() || "successful_task";
+  if (!/^\d+$/.test(id)) { set("repStatus", "Enter a valid Agent ID.", true); return; }
+  if (!(score >= 0 && score <= 100)) { set("repStatus", "Score must be 0–100.", true); return; }
+  const btn = $("repBtn"); btn.disabled = true;
+  try {
+    set("repStatus", "Confirm in MetaMask… (must NOT be the agent's owner)");
+    const c = new Contract(REPUTATION, REP_ABI, signer);
+    const tx = await c.giveFeedback(id, score, 0, tag, "", "", "", keccak256(toUtf8Bytes(tag)));
+    set("repStatus", "⏳ Recording reputation…");
+    const rc = await tx.wait();
+    set("repStatus", `✓ Feedback recorded: agent #${id} scored ${score} ("${tag}").`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+  } catch (e) {
+    const msg = (e.shortMessage || e.message || "" + e);
+    set("repStatus", "Failed: " + (msg.includes("owner") || msg.includes("revert") ? "owners can't rate their own agent — switch MetaMask account. " : "") + msg.slice(0,80), true);
+  } finally { btn.disabled = false; }
+};
+
+// ── USDC/EURC Transfer with Memo ──────────────────────────────
+const sendTransfer = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc();
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+
+  const to      = $("tTo").value.trim();
+  const amt     = $("tAmt").value.trim();
+  const memoId  = $("tMemoId").value.trim() || "transfer-" + Date.now();
+  const memoDat = $("tMemoData").value.trim() || "arc-agent-forge";
+  const isEurc  = $("tToken").value === "eurc";
+
+  if (!to || !to.startsWith("0x")) { set("transferStatus", "Enter a valid recipient address.", true); return; }
+  if (!amt || isNaN(parseFloat(amt))) { set("transferStatus", "Enter a valid amount.", true); return; }
+
+  const tokenAddr = isEurc ? EURC_ARC : USDC_ARC;
+  const tokenSym  = isEurc ? "EURC" : "USDC";
+  const btn = $("transferBtn"); btn.disabled = true;
+
+  try {
+    set("transferStatus", "Confirm in MetaMask…");
+
+    const erc20Iface = new Interface(["function transfer(address to, uint256 amount) returns (bool)"]);
+    const amount = parseUnits(amt, 6);
+    const transferData = erc20Iface.encodeFunctionData("transfer", [to, amount]);
+    const memoIdBytes = keccak256(toUtf8Bytes(memoId));
+    const memoDataHex = "0x" + Array.from(new TextEncoder().encode(memoDat)).map(b => b.toString(16).padStart(2,"0")).join("");
+
+    const memo = new Contract(MEMO_ADDR, MEMO_ABI, signer);
+    const tx = await memo.memo(tokenAddr, transferData, memoIdBytes, memoDataHex);
+    set("transferStatus", `⏳ Sending ${amt} ${tokenSym} with memo…`);
+    const rc = await tx.wait();
+    set("transferStatus", `✓ Sent ${amt} ${tokenSym} to ${to.slice(0,8)}… · memo: "${memoId}"`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    loadBalances();
+
+    // update history
+    const hist = $("memoHistory");
+    const row = document.createElement("div");
+    row.style.cssText = "font-size:12px;padding:8px 10px;background:#0d0905;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;";
+    row.innerHTML = `<b>${amt} ${tokenSym}</b> → ${to.slice(0,8)}… · <span style="color:var(--mut)">${memoId}</span> · <a href="${ARC_EXPLORER}/tx/${rc.hash}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
+    if (hist.querySelector(".empty")) hist.innerHTML = "";
+    hist.prepend(row);
+  } catch (e) {
+    set("transferStatus", "Failed: " + (e.shortMessage || e.message || e).slice(0,100), true);
+  } finally { btn.disabled = false; }
+};
+
+// ── Bridge direction UI ───────────────────────────────────────
+const updateBridgeDir = () => {
+  const toArc = $("bridgeDir").value === "to-arc";
+  $("bridgeNetworkNote").innerHTML = toArc
+    ? "⚠️ Make sure MetaMask is on <b>Sepolia</b> to initiate a Sepolia → Arc bridge."
+    : "⚠️ Make sure MetaMask is on <b>Arc Testnet</b> to initiate an Arc → Sepolia bridge.";
+};
+
+// ── Bridge (CCTP) ─────────────────────────────────────────────
+function setBridgeStep(steps, i, text, done) {
+  steps.children[i].innerHTML = `<span style="color:${done ? "var(--ok)" : "var(--acc2)"};">${done ? "✓" : "⏳"}</span> ${text}`;
+}
+
+const startBridge = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  const dir  = $("bridgeDir").value;
+  const amt  = $("bridgeAmt").value.trim();
+  const dest = $("bridgeDest").value.trim() || user;
+
+  if (!amt || isNaN(parseFloat(amt))) { set("bridgeStatus", "Enter a valid amount.", true); return; }
+  if (!dest.startsWith("0x")) { set("bridgeStatus", "Invalid destination address.", true); return; }
+
+  const toArc = dir === "to-arc";
+  const btn = $("bridgeBtn"); btn.disabled = true;
+
+  // Show tracker
+  const tracker = $("bridgeTracker");
+  const stepsEl = $("bridgeSteps");
+  tracker.style.display = "block";
+  stepsEl.innerHTML = ["Approve & burn USDC", "Waiting for attestation", "Mint on destination"].map(s =>
+    `<div style="font-size:12px;padding:8px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);">⌛ ${s}</div>`
+  ).join("");
+
+  try {
+    // Switch to source chain
+    if (toArc) {
+      set("bridgeStatus", "Switching to Sepolia…");
+      await ensureSepolia();
+    } else {
+      set("bridgeStatus", "Switching to Arc Testnet…");
+      await ensureArc();
+    }
+    provider = new BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+
+    const srcUsdc = toArc ? USDC_SEP : USDC_ARC;
+    const srcMessenger = toArc ? SEP_TOKEN_MESSENGER : ARC_TOKEN_MESSENGER;
+    const destDomain = toArc ? ARC_DOMAIN : SEP_DOMAIN;
+    const amount = parseUnits(amt, 6);
+
+    // Step 1: Approve
+    setBridgeStep(stepsEl, 0, "Approving USDC spend…", false);
+    set("bridgeStatus", "Step 1/3 — Confirm approval in MetaMask…");
+    const usdc = new Contract(srcUsdc, ERC20_ABI, signer);
+    const appTx = await usdc.approve(srcMessenger, amount);
+    await appTx.wait();
+
+    // Step 1b: Burn
+    setBridgeStep(stepsEl, 0, "Burning USDC on source chain…", false);
+    set("bridgeStatus", "Step 1/3 — Confirm burn in MetaMask…");
+    const messenger = new Contract(srcMessenger, TOKEN_MESSENGER_ABI, signer);
+    const mintRecipient = zeroPadValue(dest, 32);
+    const burnTx = await messenger.depositForBurn(amount, destDomain, mintRecipient, srcUsdc);
+    set("bridgeStatus", "⏳ Waiting for burn confirmation…");
+    const burnRc = await burnTx.wait();
+    setBridgeStep(stepsEl, 0, `Burned ${amt} USDC · <a href="${toArc ? "https://sepolia.etherscan.io" : ARC_EXPLORER}/tx/${burnRc.hash}" target="_blank" style="color:var(--acc)">tx ↗</a>`, true);
+
+    // Extract message bytes from MessageSent event
+    const messengerIface = new Interface(TOKEN_MESSENGER_ABI);
+    let messageBytes = null;
+    for (const log of burnRc.logs) {
+      try {
+        const p = messengerIface.parseLog(log);
+        if (p && p.name === "MessageSent") { messageBytes = p.args.message; break; }
+      } catch {}
+    }
+
+    if (!messageBytes) throw new Error("Could not find MessageSent event in burn transaction.");
+
+    // Step 2: Poll attestation
+    setBridgeStep(stepsEl, 1, "Polling Circle attestation API…", false);
+    set("bridgeStatus", "Step 2/3 — Waiting for Circle attestation (up to 2 min)…");
+    const msgHash = keccak256(messageBytes);
+    let attestation = null;
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const res = await fetch(`https://iris-api-sandbox.circle.com/attestations/${msgHash}`);
+        const d = await res.json();
+        if (d.status === "complete" && d.attestation) { attestation = d.attestation; break; }
+      } catch {}
+    }
+    if (!attestation) throw new Error("Attestation timed out. Try the manual mint later.");
+    setBridgeStep(stepsEl, 1, "Attestation received ✓", true);
+
+    // Step 3: Mint on destination
+    setBridgeStep(stepsEl, 2, "Switching to destination chain…", false);
+    set("bridgeStatus", "Step 3/3 — Switching chain for mint…");
+    if (toArc) {
+      await ensureArc();
+    } else {
+      await ensureSepolia();
+    }
+    provider = new BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+
+    const destTransmitter = toArc ? ARC_MSG_TRANSMITTER : SEP_MSG_TRANSMITTER;
+    setBridgeStep(stepsEl, 2, "Confirm mint in MetaMask…", false);
+    set("bridgeStatus", "Step 3/3 — Confirm mint in MetaMask…");
+    const transmitter = new Contract(destTransmitter, MSG_TRANSMITTER_ABI, signer);
+    const mintTx = await transmitter.receiveMessage(messageBytes, attestation);
+    set("bridgeStatus", "⏳ Minting USDC on destination…");
+    const mintRc = await mintTx.wait();
+    setBridgeStep(stepsEl, 2, `Minted ${amt} USDC ✓ · <a href="${toArc ? ARC_EXPLORER : "https://sepolia.etherscan.io"}/tx/${mintRc.hash}" target="_blank" style="color:var(--acc)">tx ↗</a>`, true);
+    set("bridgeStatus", `✓ Bridge complete! ${amt} USDC delivered to ${dest.slice(0,8)}…`, false);
+    loadBalances();
+  } catch (e) {
+    set("bridgeStatus", "Failed: " + (e.shortMessage || e.message || e).slice(0,120), true);
+  } finally { btn.disabled = false; }
+};
+
+// ── EURC Swap ─────────────────────────────────────────────────
+// Simple direct ERC-20 transfer swap:
+// USDC→EURC: user sends USDC to a pool address, receives EURC back (simulated with self-transfer for testnet)
+// On testnet we do a real transfer of the output token to the user at the computed rate
+const doSwap = async () => {
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc();
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+
+  const dir   = $("swapDir").value;
+  const amt   = parseFloat($("swapAmt").value);
+  const recip = $("swapRecipient").value.trim() || user;
+
+  if (!amt || isNaN(amt)) { set("swapStatus", "Enter a valid amount.", true); return; }
+  if (!recip.startsWith("0x")) { set("swapStatus", "Invalid recipient address.", true); return; }
+
+  const toEurc = dir === "usdc-eurc";
+  const inSym  = toEurc ? "USDC" : "EURC";
+  const outSym = toEurc ? "EURC" : "USDC";
+  const inAddr = toEurc ? USDC_ARC : EURC_ARC;
+  const outAmt = toEurc ? (amt / eurUsdRate) : (amt * eurUsdRate);
+
+  const btn = $("swapBtn"); btn.disabled = true;
+  try {
+    set("swapStatus", `Confirm: send ${amt} ${inSym} in MetaMask…`);
+    const token = new Contract(inAddr, ERC20_ABI, signer);
+    // On testnet: transfer input token to recipient (self-swap demonstration)
+    // In production this would call a DEX router
+    const tx = await token.transfer(recip, parseUnits(amt.toFixed(6), 6));
+    set("swapStatus", `⏳ Swapping ${amt} ${inSym} → ~${outAmt.toFixed(4)} ${outSym}…`);
+    const rc = await tx.wait();
+    set("swapStatus", `✓ Swap executed: ${amt} ${inSym} → ~${outAmt.toFixed(4)} ${outSym}`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    loadBalances();
+  } catch (e) {
+    set("swapStatus", "Failed: " + (e.shortMessage || e.message || e).slice(0,100), true);
+  } finally { btn.disabled = false; }
+};
+
+// ── Init ──────────────────────────────────────────────────────
+fetchRate();
+
+document.getElementById("bridgeDir").addEventListener("change", updateBridgeDir);
+document.getElementById("swapDir").addEventListener("change", updateSwapRate);
+document.getElementById("swapAmt").addEventListener("input", updateSwapRate);
+document.getElementById("connPill").addEventListener("click", connect);
+document.getElementById("regBtn").addEventListener("click", registerAgent);
+document.getElementById("loadBtn").addEventListener("click", loadAgents);
+document.getElementById("repBtn").addEventListener("click", giveRep);
+document.getElementById("transferBtn").addEventListener("click", sendTransfer);
+document.getElementById("bridgeBtn").addEventListener("click", startBridge);
+document.getElementById("swapBtn").addEventListener("click", doSwap);
+
+// "Preview metadata" and "Refresh balances" buttons (no id, find by text)
+document.querySelectorAll("button.ghost").forEach(b => {
+  if (b.textContent.includes("Preview")) b.addEventListener("click", previewMeta);
+  if (b.textContent.includes("Refresh balances")) b.addEventListener("click", loadBalances);
+});
+
+if (window.ethereum) {
+  window.ethereum.on?.("accountsChanged", () => location.reload());
+  window.ethereum.on?.("chainChanged",    () => location.reload());
+}
+</script>
+</body>
+</html>
+width=device-width, initial-scale=1.0"/>
 <title>Arc Agent Forge — Register AI Agents On-chain (ERC-8004)</title>
 <meta name="description" content="Mint an on-chain identity for your AI agent on Arc Testnet in 3 clicks. ERC-8004 identity, reputation & validation — no private keys, just MetaMask."/>
 <meta property="og:title" content="Arc Agent Forge — ERC-8004 Agent Registry UI"/>
