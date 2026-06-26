@@ -616,24 +616,27 @@ async function startBridge() {
       }
     }
     if (!msgBytes) throw new Error("MessageSent event not found.");
-    stepsEl.children[1].innerHTML="⏳ Polling attestation (up to 3 min)…";
+    stepsEl.children[1].innerHTML="⏳ Polling attestation…";
     setStatus("bridgeStatus","Step 2/3 — Waiting for Circle attestation…");
     let attest=null;
+    let lastErr="";
     for (let i=0;i<60;i++) {
       await new Promise(r=>setTimeout(r,5000));
       try {
         const srcDomain=toArc?ARC_DOMAIN:SEP_DOMAIN;
         const res=await fetch(`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${burnRc.hash}`);
+        if (!res.ok) { lastErr="API "+res.status; stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, ${lastErr})`; continue; }
         const d=await res.json();
         const msg=d.messages?.[0];
-        if (msg && msg.attestation && msg.attestation!=="PENDING") {
+        stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, status: ${msg?.status||"none"})`;
+        if (msg && msg.status==="complete" && msg.attestation && msg.attestation!=="PENDING") {
           attest=msg.attestation;
-          if (msg.message) msgBytes=msg.message; // use message bytes from API if available
+          if (msg.message) msgBytes=msg.message;
           break;
         }
-      } catch {}
+      } catch(err) { lastErr=err.message||"fetch error"; stepsEl.children[1].innerHTML=`⏳ Polling… (${i+1}/60, ${lastErr})`; }
     }
-    if (!attest) throw new Error("Attestation timed out.");
+    if (!attest) throw new Error("Attestation timed out. "+lastErr);
     stepsEl.children[1].innerHTML=`<span style="color:var(--ok)">✓</span> Attestation received`;
     stepsEl.children[2].innerHTML="⏳ Confirm mint in MetaMask…";
     setStatus("bridgeStatus","Step 3/3 — Switching to destination chain…");
