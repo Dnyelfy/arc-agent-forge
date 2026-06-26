@@ -219,10 +219,10 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
   <section class="card">
     <h2>ℹ️ Contract addresses</h2>
     <div style="font-size:12px;line-height:2;color:var(--mut);">
-      <b style="color:var(--ink);">Sepolia</b><br/>
-      TokenMessenger: <code>0x9f3B8679c73C2Fef8b59B4f3444d4e156fb70AA5</code><br/>
-      MessageTransmitter: <code>0x7865fAfC2db2093669d92c0197ea5d5852acD22A</code><br/><br/>
-      <b style="color:var(--ink);">Arc Testnet (CCTP V2 · Domain 26)</b><br/>
+      <b style="color:var(--ink);">Sepolia (Domain 0) — CCTP V2</b><br/>
+      TokenMessenger V2: <code>0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA</code><br/>
+      MessageTransmitter V2: <code>0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275</code><br/><br/>
+      <b style="color:var(--ink);">Arc Testnet (Domain 26) — CCTP V2</b><br/>
       TokenMessenger V2: <code>0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA</code><br/>
       MessageTransmitter V2: <code>0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275</code><br/>
       USDC: <code>0x3600000000000000000000000000000000000000</code>
@@ -290,8 +290,8 @@ const REPUTATION = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
 const MEMO_ADDR  = "0x5294E9927c3306DcBaDb03fe70b92e01cCede505";
 const USDC_ARC   = "0x3600000000000000000000000000000000000000";
 const EURC_ARC   = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
-const SEP_MESSENGER  = "0x9f3B8679c73C2Fef8b59B4f3444d4e156fb70AA5";
-const SEP_TRANSMIT   = "0x7865fAfC2db2093669d92c0197ea5d5852acD22A";
+const SEP_MESSENGER  = "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA";
+const SEP_TRANSMIT   = "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275";
 const USDC_SEP       = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const ARC_MESSENGER  = "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA";
 const ARC_TRANSMIT   = "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275";
@@ -302,7 +302,7 @@ const ID_ABI = ["function register(string metadataURI)","event Transfer(address 
 const REP_ABI = ["function giveFeedback(uint256 agentId,int128 score,uint8 feedbackType,string tag,string metadataURI,string evidenceURI,string comment,bytes32 feedbackHash)"];
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)","function transfer(address to,uint256 amount) returns (bool)","function approve(address spender,uint256 amount) returns (bool)"];
 const MEMO_ABI = ["function memo(address target,bytes data,bytes32 memoId,bytes memoData)","event Memo(address indexed sender,address indexed target,bytes32 callDataHash,bytes32 indexed memoId,bytes memo,uint256 memoIndex)"];
-const TM_ABI = ["function depositForBurn(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken) returns (uint64)"];
+const TM_ABI = ["function depositForBurn(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,uint256 maxFee,uint32 minFinalityThreshold) returns (uint64)"];
 const MT_ABI = ["function receiveMessage(bytes message,bytes attestation)","event MessageSent(bytes message)"];
 
 let provider = null, signer = null, user = "";
@@ -585,7 +585,15 @@ async function startBridge() {
     setStatus("bridgeStatus","Step 1/3 — Confirm burn in MetaMask…");
     const messenger=new Contract(srcMsg,TM_ABI,signer);
     const mintRecipient=zeroPadValue(dest,32);
-    const burnTx=await messenger.depositForBurn(amount,dstDomain,mintRecipient,srcUsdc);
+    const burnTx=await messenger.depositForBurn(
+      amount,
+      dstDomain,
+      mintRecipient,
+      srcUsdc,
+      "0x0000000000000000000000000000000000000000000000000000000000000000", // destinationCaller = any
+      0n, // maxFee = 0 for standard transfer
+      1000 // minFinalityThreshold
+    );
     const burnRc=await burnTx.wait();
     const burnUrl=(toArc?"https://sepolia.etherscan.io":ARC_EXPLORER)+"/tx/"+burnRc.hash;
     stepsEl.children[0].innerHTML=`<span style="color:var(--ok)">✓</span> Burned ${amt} USDC · <a href="${burnUrl}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
