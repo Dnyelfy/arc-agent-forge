@@ -619,10 +619,20 @@ async function checkAndMint() {
   $("mintBtn").disabled=true;
   try {
     setStatus("mintStatus","Checking attestation…");
-    const res=await fetch(`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${txHash}`);
-    if (res.status===404) { setStatus("mintStatus","Not indexed yet by Circle. Wait a few minutes and try again.",true); return; }
-    if (!res.ok) { setStatus("mintStatus","API error "+res.status+". Try again shortly.",true); return; }
-    const d=await res.json();
+    const apiUrl=`https://iris-api-sandbox.circle.com/v2/messages/${srcDomain}?transactionHash=${txHash}`;
+    let d=null;
+    // try direct first, then CORS proxy fallbacks
+    const urls=[apiUrl, `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`];
+    for (const u of urls) {
+      try {
+        const res=await fetch(u);
+        if (res.status===404) { setStatus("mintStatus","Not indexed yet by Circle. Wait a few minutes and try again.",true); $("mintBtn").disabled=false; return; }
+        if (!res.ok) continue;
+        d=await res.json();
+        if (d) break;
+      } catch {}
+    }
+    if (!d) { setStatus("mintStatus","Could not reach Circle API (CORS). Try again shortly.",true); return; }
     const msg=d.messages?.[0];
     if (!msg) { setStatus("mintStatus","No message found for this tx yet. Wait and retry.",true); return; }
     if (msg.status!=="complete"||!msg.attestation||msg.attestation==="PENDING") {
@@ -642,7 +652,7 @@ async function checkAndMint() {
     loadBalances();
   } catch(e) {
     const m=(e.shortMessage||e.message||""+e);
-    if (m.includes("already")||m.includes("used")) setStatus("mintStatus","This message was already minted.",true);
+    if (m.includes("already")||m.includes("used")||m.includes("nonce")) setStatus("mintStatus","This message was already minted.",true);
     else setStatus("mintStatus","Failed: "+m.slice(0,120),true);
   } finally { $("mintBtn").disabled=false; }
 }
