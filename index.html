@@ -227,72 +227,68 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
 <!-- JOBS -->
 <div class="tabpane" id="tab-jobs">
   <section class="card">
-    <h2><span class="badge">ERC-8183</span> Create a Job</h2>
-    <p class="note">Agentic Commerce flow — a Client posts a job, a Provider does the work, an Evaluator approves payment. Funds escrow in USDC. For testing, you can be all three roles (set Provider to a 2nd wallet or your agent, Evaluator = you).</p>
-    <label>Provider address <span style="font-weight:400;color:var(--mut);">(who does the work)</span></label>
-    <input id="jProvider" placeholder="0x… provider wallet"/>
-    <label>Evaluator address <span style="font-weight:400;color:var(--mut);">(blank = you)</span></label>
-    <input id="jEvaluator" placeholder="0x… or leave blank"/>
-    <label>Task description</label>
-    <textarea id="jDesc" placeholder="Review a market brief on stablecoin payments in Asia." maxlength="200"></textarea>
-    <label>Expiry <span style="font-weight:400;color:var(--mut);">(funds auto-refund if not done)</span></label>
-    <select id="jExpiry">
-      <option value="3600">1 hour</option>
-      <option value="86400">24 hours</option>
-      <option value="604800">7 days</option>
+    <h2><span class="badge">ERC-8183</span> Hire an agent</h2>
+    <p class="note">Post a job, escrow USDC, and release payment — the full Agentic Commerce flow in one click. The contract holds the funds in escrow until the work is approved, so neither side can cheat.</p>
+
+    <label>Agent / provider address <span style="font-weight:400;color:var(--mut);">(who gets paid)</span></label>
+    <input id="jProvider" placeholder="0x… agent wallet"/>
+
+    <label>What's the job?</label>
+    <select id="jTemplate">
+      <option value="Write a market brief on stablecoin payments in Asia.">📊 Market research brief</option>
+      <option value="Analyze the provided dataset and return key insights.">📈 Data analysis</option>
+      <option value="Generate social media content for a product launch.">✍️ Content generation</option>
+      <option value="Audit the smart contract for common vulnerabilities.">🔒 Code / security review</option>
+      <option value="custom">✏️ Custom task…</option>
     </select>
-    <div style="margin-top:16px;">
-      <button id="createJobBtn">📋 Create job (Step 1)</button>
-    </div>
-    <div class="status" id="createJobStatus"></div>
-  </section>
+    <input id="jCustomDesc" placeholder="Describe the task…" style="display:none;margin-top:8px;"/>
 
-  <section class="card">
-    <h2>🔧 Manage a Job</h2>
-    <p class="note">After creating, the Job ID appears above. Run the lifecycle: set budget → fund (escrow USDC) → submit work → approve to release payment.</p>
-    <label>Job ID</label>
-    <input id="jId" placeholder="e.g. 1" inputmode="numeric"/>
-
-    <div style="margin-top:14px;padding:14px;background:#0d0905;border:1px solid var(--line);border-radius:10px;">
-      <div style="font-size:12px;color:var(--acc);font-weight:700;margin-bottom:8px;">STEP 2 — Set budget (Provider or Client)</div>
-      <label>Budget (USDC)</label>
-      <input id="jBudget" placeholder="10.00" inputmode="decimal"/>
-      <button id="setBudgetBtn" style="margin-top:10px;">💰 Set budget</button>
-      <div class="status" id="setBudgetStatus"></div>
-    </div>
-
-    <div style="margin-top:12px;padding:14px;background:#0d0905;border:1px solid var(--line);border-radius:10px;">
-      <div style="font-size:12px;color:var(--acc);font-weight:700;margin-bottom:8px;">STEP 3 — Fund / escrow (Client)</div>
-      <p class="note" style="margin:0 0 10px;">Approves & locks the budget in escrow. Job moves to Funded.</p>
-      <button class="green" id="fundJobBtn">🔒 Approve & fund</button>
-      <div class="status" id="fundJobStatus"></div>
-    </div>
-
-    <div style="margin-top:12px;padding:14px;background:#0d0905;border:1px solid var(--line);border-radius:10px;">
-      <div style="font-size:12px;color:var(--acc);font-weight:700;margin-bottom:8px;">STEP 4 — Submit work (Provider)</div>
-      <label>Deliverable reference (URI or text)</label>
-      <input id="jDeliverable" placeholder="ipfs://… or report summary"/>
-      <button id="submitJobBtn" style="margin-top:10px;">📤 Submit deliverable</button>
-      <div class="status" id="submitJobStatus"></div>
-    </div>
-
-    <div style="margin-top:12px;padding:14px;background:#0d0905;border:1px solid var(--line);border-radius:10px;">
-      <div style="font-size:12px;color:var(--acc);font-weight:700;margin-bottom:8px;">STEP 5 — Settle (Evaluator)</div>
-      <p class="note" style="margin:0 0 10px;">Approve releases escrow to provider. Reject refunds the client.</p>
-      <div class="row">
-        <button class="green" id="approveJobBtn">✅ Approve & pay</button>
-        <button class="ghost" id="rejectJobBtn">❌ Reject & refund</button>
+    <div class="row" style="margin-top:4px;">
+      <div>
+        <label>Payment (USDC)</label>
+        <input id="jBudget" placeholder="5.00" inputmode="decimal"/>
       </div>
-      <div class="status" id="settleJobStatus"></div>
+      <div>
+        <label>Deadline</label>
+        <select id="jExpiry">
+          <option value="3600">1 hour</option>
+          <option value="86400">24 hours</option>
+          <option value="604800">7 days</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <button class="green" id="runJobBtn">🚀 Post job & escrow payment</button>
+    </div>
+    <p class="note" style="margin-top:10px;">You'll approve a few MetaMask prompts in sequence — create job, set price, lock funds. Each is one tap.</p>
+    <div class="status" id="jobFlowStatus"></div>
+
+    <div id="jobProgress" style="display:none;margin-top:16px;">
+      <div style="font-size:12px;color:var(--mut);margin-bottom:8px;">Job lifecycle</div>
+      <div id="jobSteps" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
   </section>
 
+  <section class="card" id="settleCard" style="display:none;">
+    <h2>✅ Release payment</h2>
+    <p class="note">The job is funded and the provider has submitted work (auto-submitted in this demo). As the evaluator, approve to release the escrowed USDC to the provider — or reject to refund yourself.</p>
+    <div style="font-size:13px;color:var(--mut);margin-bottom:12px;">Active Job ID: <b id="activeJobId" style="color:var(--acc)">—</b></div>
+    <div class="row">
+      <button class="green" id="approveJobBtn">✅ Approve & pay provider</button>
+      <button class="ghost" id="rejectJobBtn">❌ Reject & refund me</button>
+    </div>
+    <div class="status" id="settleJobStatus"></div>
+  </section>
+
   <section class="card">
-    <h2>ℹ️ ERC-8183 contract</h2>
-    <div style="font-size:12px;line-height:2;color:var(--mut);">
-      Agentic Commerce: <code>0x0747EEf0706327138c69792bF28Cd525089e4583</code><br/>
-      USDC: <code>0x3600000000000000000000000000000000000000</code><br/>
-      Flow: createJob → setBudget → fund → submit → complete/reject
+    <h2>ℹ️ How escrow works</h2>
+    <div style="font-size:12px;line-height:1.8;color:var(--mut);">
+      <b style="color:var(--ink)">1. Post</b> — you define the job & provider on-chain.<br/>
+      <b style="color:var(--ink)">2. Escrow</b> — your USDC locks in the contract. The provider can't be stiffed.<br/>
+      <b style="color:var(--ink)">3. Deliver</b> — the provider submits proof of work.<br/>
+      <b style="color:var(--ink)">4. Settle</b> — you approve → provider paid, or reject → you refunded.<br/><br/>
+      Contract: <code>0x0747EEf0706327138c69792bF28Cd525089e4583</code>
     </div>
   </section>
 </div>
@@ -329,8 +325,8 @@ const JOB_ABI = [
   "function setBudget(uint256 jobId,uint256 amount,bytes optParams)",
   "function fund(uint256 jobId,bytes optParams)",
   "function submit(uint256 jobId,bytes32 deliverable,bytes optParams)",
-  "function complete(uint256 jobId,bytes reason,bytes optParams)",
-  "function reject(uint256 jobId,bytes reason,bytes optParams)",
+  "function complete(uint256 jobId,bytes32 reason,bytes optParams)",
+  "function reject(uint256 jobId,bytes32 reason,bytes optParams)",
   "event JobCreated(uint256 indexed jobId,address indexed client,address indexed provider,address evaluator,uint256 expiredAt,address hook)"
 ];
 
@@ -584,124 +580,125 @@ async function sendTransfer() {
   finally { $("transferBtn").disabled=false; }
 }
 
-// ── ERC-8183 JOBS ─────────────────────────────────────────────
-async function jobSigner() {
-  if (!signer) { await connect(); if (!signer) return null; }
-  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
-  return new Contract(JOB_ADDR, JOB_ABI, signer);
+// ── ERC-8183 JOBS (single flow) ───────────────────────────────
+let activeJobId = null;
+
+function jobStepRow(steps, label) {
+  const div=document.createElement("div");
+  div.style.cssText="font-size:12px;padding:8px 10px;background:#0d0905;border:1px solid var(--line);border-radius:8px;color:var(--mut);";
+  div.innerHTML="⌛ "+label;
+  steps.appendChild(div);
+  return div;
+}
+function jobStepDone(row, label, url) {
+  row.style.borderColor="#1a4a2c";
+  row.innerHTML=`<span style="color:var(--ok)">✓</span> ${label}`+(url?` · <a href="${url}" target="_blank" style="color:var(--acc)">tx ↗</a>`:"");
 }
 
-async function createJob() {
+async function runJobFlow() {
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+
   const prov=$("jProvider").value.trim();
-  const evalr=$("jEvaluator").value.trim()||user;
-  const desc=$("jDesc").value.trim()||"Job via Arc Agent Forge";
+  const tmpl=$("jTemplate").value;
+  const desc=tmpl==="custom" ? ($("jCustomDesc").value.trim()||"Custom job") : tmpl;
+  const amt=$("jBudget").value.trim();
   const expSecs=parseInt($("jExpiry").value);
-  if (!prov.startsWith("0x")) { setStatus("createJobStatus","Enter a provider address.",true); return; }
-  const c=await jobSigner(); if (!c) return;
-  $("createJobBtn").disabled=true;
+
+  if (!prov.startsWith("0x")) { setStatus("jobFlowStatus","Enter the provider (agent) address.",true); return; }
+  if (!amt||isNaN(parseFloat(amt))) { setStatus("jobFlowStatus","Enter a payment amount.",true); return; }
+
+  $("runJobBtn").disabled=true;
+  $("jobProgress").style.display="block";
+  const steps=$("jobSteps"); steps.innerHTML="";
+  const c=new Contract(JOB_ADDR, JOB_ABI, signer);
+  const amount=parseUnits(amt,6);
+
   try {
+    // 1. createJob (client = you, evaluator = you)
+    const r1=jobStepRow(steps,"Posting job on-chain…");
+    setStatus("jobFlowStatus","Step 1/5 — Confirm 'create job' in MetaMask…");
     const expiredAt=Math.floor(Date.now()/1000)+expSecs;
-    setStatus("createJobStatus","Confirm in MetaMask…");
-    const tx=await c.createJob(prov, evalr||user, expiredAt, desc, "0x0000000000000000000000000000000000000000");
-    setStatus("createJobStatus","⏳ Creating job…");
-    const rc=await tx.wait();
-    // parse JobCreated event for jobId
+    const tx1=await c.createJob(prov, user, expiredAt, desc, "0x0000000000000000000000000000000000000000");
+    const rc1=await tx1.wait();
     const iface=new Interface(JOB_ABI);
     let jobId=null;
-    for (const log of rc.logs) { try { const p=iface.parseLog(log); if(p?.name==="JobCreated") jobId=p.args.jobId.toString(); } catch{} }
-    setStatus("createJobStatus",`✓ Job created! ID: ${jobId??"—"} (Open)`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
-    if (jobId) $("jId").value=jobId;
-  } catch(e) { setStatus("createJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
-  finally { $("createJobBtn").disabled=false; }
-}
+    for (const log of rc1.logs) { try { const p=iface.parseLog(log); if(p?.name==="JobCreated") jobId=p.args.jobId.toString(); } catch{} }
+    if (!jobId) throw new Error("Could not read Job ID");
+    activeJobId=jobId;
+    jobStepDone(r1, `Job #${jobId} posted (Open)`, `${ARC_EXPLORER}/tx/${rc1.hash}`);
 
-async function setBudget() {
-  const id=$("jId").value.trim(), amt=$("jBudget").value.trim();
-  if (!/^\d+$/.test(id)) { setStatus("setBudgetStatus","Enter a valid Job ID.",true); return; }
-  if (!amt||isNaN(parseFloat(amt))) { setStatus("setBudgetStatus","Enter a budget.",true); return; }
-  const c=await jobSigner(); if (!c) return;
-  $("setBudgetBtn").disabled=true;
-  try {
-    setStatus("setBudgetStatus","Confirm in MetaMask…");
-    const tx=await c.setBudget(id, parseUnits(amt,6), "0x");
-    setStatus("setBudgetStatus","⏳ Setting budget…");
-    const rc=await tx.wait();
-    setStatus("setBudgetStatus",`✓ Budget set: ${amt} USDC`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
-  } catch(e) { setStatus("setBudgetStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
-  finally { $("setBudgetBtn").disabled=false; }
-}
+    // 2. setBudget
+    const r2=jobStepRow(steps,"Setting price…");
+    setStatus("jobFlowStatus","Step 2/5 — Confirm 'set budget' in MetaMask…");
+    const tx2=await c.setBudget(jobId, amount, "0x");
+    const rc2=await tx2.wait();
+    jobStepDone(r2, `Price set: ${amt} USDC`, `${ARC_EXPLORER}/tx/${rc2.hash}`);
 
-async function fundJob() {
-  const id=$("jId").value.trim(), amt=$("jBudget").value.trim();
-  if (!/^\d+$/.test(id)) { setStatus("fundJobStatus","Enter a valid Job ID.",true); return; }
-  if (!amt||isNaN(parseFloat(amt))) { setStatus("fundJobStatus","Set the budget amount above first.",true); return; }
-  const c=await jobSigner(); if (!c) return;
-  $("fundJobBtn").disabled=true;
-  try {
-    const amount=parseUnits(amt,6);
-    setStatus("fundJobStatus","Step 1/2 — Approve USDC in MetaMask…");
+    // 3. approve USDC
+    const r3=jobStepRow(steps,"Approving USDC…");
+    setStatus("jobFlowStatus","Step 3/5 — Confirm 'approve USDC' in MetaMask…");
     const usdc=new Contract(USDC_ARC,ERC20_ABI,signer);
-    await (await usdc.approve(JOB_ADDR, amount)).wait();
-    setStatus("fundJobStatus","Step 2/2 — Confirm fund in MetaMask…");
-    const tx=await c.fund(id, "0x");
-    setStatus("fundJobStatus","⏳ Escrowing funds…");
-    const rc=await tx.wait();
-    setStatus("fundJobStatus",`✓ Funded ${amt} USDC into escrow (Funded)`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
-    loadBalances();
-  } catch(e) { setStatus("fundJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
-  finally { $("fundJobBtn").disabled=false; }
-}
+    const txA=await usdc.approve(JOB_ADDR, amount);
+    await txA.wait();
+    jobStepDone(r3, "USDC approved");
 
-async function submitJob() {
-  const id=$("jId").value.trim(), deliv=$("jDeliverable").value.trim()||"deliverable";
-  if (!/^\d+$/.test(id)) { setStatus("submitJobStatus","Enter a valid Job ID.",true); return; }
-  const c=await jobSigner(); if (!c) return;
-  $("submitJobBtn").disabled=true;
-  try {
-    const delivBytes=keccak256(toUtf8Bytes(deliv));
-    setStatus("submitJobStatus","Confirm in MetaMask… (provider role)");
-    const tx=await c.submit(id, delivBytes, "0x");
-    setStatus("submitJobStatus","⏳ Submitting deliverable…");
-    const rc=await tx.wait();
-    setStatus("submitJobStatus",`✓ Submitted (Submitted) — awaiting evaluator`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
-  } catch(e) { setStatus("submitJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
-  finally { $("submitJobBtn").disabled=false; }
+    // 4. fund (escrow)
+    const r4=jobStepRow(steps,"Locking funds in escrow…");
+    setStatus("jobFlowStatus","Step 4/5 — Confirm 'fund' in MetaMask…");
+    const tx4=await c.fund(jobId, "0x");
+    const rc4=await tx4.wait();
+    jobStepDone(r4, `${amt} USDC escrowed (Funded)`, `${ARC_EXPLORER}/tx/${rc4.hash}`);
+
+    // 5. submit (provider submits — in this demo you submit on their behalf for the flow)
+    const r5=jobStepRow(steps,"Submitting deliverable…");
+    setStatus("jobFlowStatus","Step 5/5 — Confirm 'submit work' in MetaMask…");
+    const delivHash=keccak256(toUtf8Bytes("deliverable:"+desc));
+    const tx5=await c.submit(jobId, delivHash, "0x");
+    const rc5=await tx5.wait();
+    jobStepDone(r5, "Work submitted (Submitted)", `${ARC_EXPLORER}/tx/${rc5.hash}`);
+
+    setStatus("jobFlowStatus",`✓ Job #${jobId} is funded & submitted. Now approve payment below.`);
+    $("activeJobId").textContent="#"+jobId;
+    $("settleCard").style.display="block";
+    $("settleCard").scrollIntoView({behavior:"smooth"});
+    loadBalances();
+  } catch(e) {
+    setStatus("jobFlowStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,110),true);
+  } finally { $("runJobBtn").disabled=false; }
 }
 
 async function approveJob() {
-  const id=$("jId").value.trim();
-  if (!/^\d+$/.test(id)) { setStatus("settleJobStatus","Enter a valid Job ID.",true); return; }
-  const c=await jobSigner(); if (!c) return;
+  if (!activeJobId) { setStatus("settleJobStatus","No active job.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const c=new Contract(JOB_ADDR, JOB_ABI, signer);
   $("approveJobBtn").disabled=true;
   try {
-    setStatus("settleJobStatus","Confirm in MetaMask… (evaluator role)");
-    let tx;
-    // try 3-param signature first, fall back to 1-param
-    try {
-      tx=await c.complete(id, "0x", "0x");
-    } catch(inner) {
-      const c2=new Contract(JOB_ADDR, ["function complete(uint256 jobId)"], signer);
-      tx=await c2.complete(id);
-    }
+    setStatus("settleJobStatus","Confirm in MetaMask…");
+    const reasonHash=keccak256(toUtf8Bytes("deliverable-approved"));
+    const tx=await c.complete(activeJobId, reasonHash, "0x");
     setStatus("settleJobStatus","⏳ Releasing payment…");
     const rc=await tx.wait();
-    setStatus("settleJobStatus",`✓ Job completed — payment released to provider`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    setStatus("settleJobStatus",`✓ Done! Payment released to provider for job #${activeJobId}.`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
   } catch(e) { setStatus("settleJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
   finally { $("approveJobBtn").disabled=false; }
 }
 
 async function rejectJob() {
-  const id=$("jId").value.trim();
-  if (!/^\d+$/.test(id)) { setStatus("settleJobStatus","Enter a valid Job ID.",true); return; }
-  const c=await jobSigner(); if (!c) return;
+  if (!activeJobId) { setStatus("settleJobStatus","No active job.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const c=new Contract(JOB_ADDR, JOB_ABI, signer);
   $("rejectJobBtn").disabled=true;
   try {
-    setStatus("settleJobStatus","Confirm in MetaMask… (evaluator role)");
-    const tx=await c.reject(id, "0x", "0x");
-    setStatus("settleJobStatus","⏳ Refunding client…");
+    setStatus("settleJobStatus","Confirm in MetaMask…");
+    const reasonHash=keccak256(toUtf8Bytes("deliverable-rejected"));
+    const tx=await c.reject(activeJobId, reasonHash, "0x");
+    setStatus("settleJobStatus","⏳ Refunding…");
     const rc=await tx.wait();
-    setStatus("settleJobStatus",`✓ Job rejected — funds refunded to client`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    setStatus("settleJobStatus",`✓ Job #${activeJobId} rejected — funds refunded to you.`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
   } catch(e) { setStatus("settleJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
   finally { $("rejectJobBtn").disabled=false; }
@@ -740,12 +737,12 @@ $("refreshBalBtn").addEventListener("click", loadBalances);
 $("swapBtn").addEventListener("click", doSwap);
 $("swapDir").addEventListener("change", updateSwapRate);
 $("swapAmt").addEventListener("input", updateSwapRate);
-$("createJobBtn").addEventListener("click", createJob);
-$("setBudgetBtn").addEventListener("click", setBudget);
-$("fundJobBtn").addEventListener("click", fundJob);
-$("submitJobBtn").addEventListener("click", submitJob);
+$("runJobBtn").addEventListener("click", runJobFlow);
 $("approveJobBtn").addEventListener("click", approveJob);
 $("rejectJobBtn").addEventListener("click", rejectJob);
+$("jTemplate").addEventListener("change", () => {
+  $("jCustomDesc").style.display = $("jTemplate").value==="custom" ? "block" : "none";
+});
 
 fetchRate();
 
