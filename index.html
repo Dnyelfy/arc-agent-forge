@@ -295,15 +295,15 @@ const SEP_TRANSMIT   = "0x7865fAfC2db2093669d92c0197ea5d5852acD22A";
 const USDC_SEP       = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const ARC_MESSENGER  = "0xbd3fa81b58ba92a82136038b25adec7066af3155";
 const ARC_TRANSMIT   = "0x0a992d191deec32afe36203ad87d7d289a738f81";
-const ARC_DOMAIN = 9;
+const ARC_DOMAIN = 7;
 const SEP_DOMAIN = 0;
 
 const ID_ABI = ["function register(string metadataURI)","event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"];
 const REP_ABI = ["function giveFeedback(uint256 agentId,int128 score,uint8 feedbackType,string tag,string metadataURI,string evidenceURI,string comment,bytes32 feedbackHash)"];
 const ERC20_ABI = ["function balanceOf(address) view returns (uint256)","function transfer(address to,uint256 amount) returns (bool)","function approve(address spender,uint256 amount) returns (bool)"];
 const MEMO_ABI = ["function memo(address target,bytes data,bytes32 memoId,bytes memoData)","event Memo(address indexed sender,address indexed target,bytes32 callDataHash,bytes32 indexed memoId,bytes memo,uint256 memoIndex)"];
-const TM_ABI = ["function depositForBurn(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken) returns (uint64)","event MessageSent(bytes message)"];
-const MT_ABI = ["function receiveMessage(bytes message,bytes attestation)"];
+const TM_ABI = ["function depositForBurn(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken) returns (uint64)"];
+const MT_ABI = ["function receiveMessage(bytes message,bytes attestation)","event MessageSent(bytes message)"];
 
 let provider = null, signer = null, user = "";
 let eurUsd = 1.08;
@@ -426,16 +426,59 @@ function decodeJson(u) {
 }
 async function loadAgents() {
   if (!user) return;
-  $("agentList").innerHTML='<p class="empty">Reading ArcScan…</p>';
+  $("agentList").innerHTML='<p class="empty">Reading IdentityRegistry…</p>';
   try {
-    const r = await fetch(`${ARC_API}/addresses/${user}/nft?type=ERC-721`);
-    const d = r.ok ? await r.json() : {items:[]};
-    const mine = (d.items||[]).filter(t=>t.token?.address?.toLowerCase()===IDENTITY.toLowerCase());
-    if (!mine.length) { $("agentList").innerHTML='<p class="empty">No agents yet — forge your first one.</p>'; return; }
-    $("agentList").innerHTML = mine.map(t=>{
-      const m=t.metadata||decodeJson(t.token_url||"")||{};
-      return `<div class="agent"><div class="aid">#${t.id}</div><div class="meta"><b>${String(m.name||"Unnamed").slice(0,48)}</b><span>${m.agent_type||"—"} · ERC-8004</span></div><a href="${ARC_EXPLORER}/token/${IDENTITY}/instance/${t.id}" target="_blank" rel="noreferrer">ArcScan ↗</a></div>`;
-    }).join("");
+    const p = provider || new BrowserProvider(window.ethereum);
+    const contract = new Contract(IDENTITY, [
+      "function ownerOf(uint256 tokenId) view returns (address)",
+      "function tokenURI(uint256 tokenId) view returns (string)",
+      "function balanceOf(address owner) view returns (uint256)",
+      "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)"
+    ], p);
+
+    // Try ERC721Enumerable first
+    let tokenIds = [];
+    try {
+      const bal = await contract.balanceOf(user);
+      for (let i = 0; i < Math.min(Number(bal), 20); i++) {
+        const tid = await contract.tokenOfOwnerByIndex(user, i);
+        tokenIds.push(tid.toString());
+      }
+    } catch {
+      // Fallback: scan Transfer events with block range limit
+      try {
+        const iface = new Interface(["event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"]);
+        const latestBlock = await p.getBlockNumber();
+        const fromBlock = Math.max(0, latestBlock - 500000);
+        const logs = await p.getLogs({
+          address: IDENTITY,
+          topics: [iface.getEvent("Transfer").topicHash, null, "0x"+user.slice(2).toLowerCase().padStart(64,"0")],
+          fromBlock: BigInt(fromBlock),
+          toBlock: "latest"
+        });
+        for (const log of logs) {
+          try { const parsed = iface.parseLog(log); tokenIds.push(parsed.args.tokenId.toString()); } catch{}
+        }
+      } catch {}
+    }
+
+    if (!tokenIds.length) { $("agentList").innerHTML='<p class="empty">No agents found. Try forging one above.</p>'; return; }
+
+    const items = [];
+    for (const tokenId of [...new Set(tokenIds)]) {
+      try {
+        const owner = await contract.ownerOf(tokenId);
+        if (owner.toLowerCase() !== user.toLowerCase()) continue;
+        let meta = {};
+        try { const uri = await contract.tokenURI(tokenId); meta = decodeJson(uri) || {}; } catch {}
+        items.push({tokenId, meta});
+      } catch {}
+    }
+
+    if (!items.length) { $("agentList").innerHTML='<p class="empty">No agents owned by this wallet.</p>'; return; }
+    $("agentList").innerHTML = items.map(({tokenId, meta}) =>
+      `<div class="agent"><div class="aid">#${tokenId}</div><div class="meta"><b>${String(meta.name||"Unnamed").slice(0,48)}</b><span>${meta.agent_type||"—"} · ERC-8004</span></div><a href="${ARC_EXPLORER}/token/${IDENTITY}/instance/${tokenId}" target="_blank" rel="noreferrer">ArcScan ↗</a></div>`
+    ).join("");
   } catch(e) { $("agentList").innerHTML='<p class="empty">Error: '+(e.message||"")+'</p>'; }
 }
 
@@ -527,9 +570,24 @@ async function startBridge() {
     const burnRc=await burnTx.wait();
     const burnUrl=(toArc?"https://sepolia.etherscan.io":ARC_EXPLORER)+"/tx/"+burnRc.hash;
     stepsEl.children[0].innerHTML=`<span style="color:var(--ok)">✓</span> Burned ${amt} USDC · <a href="${burnUrl}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
-    const tmIface=new Interface(TM_ABI);
+    const srcTransmit=toArc?SEP_TRANSMIT:ARC_TRANSMIT;
+    const mtIface=new Interface(MT_ABI);
     let msgBytes=null;
-    for (const log of burnRc.logs) { try { const p=tmIface.parseLog(log); if(p?.name==="MessageSent"){msgBytes=p.args.message;break;} } catch{} }
+    for (const log of burnRc.logs) {
+      try {
+        // MessageSent comes from MessageTransmitter, not TokenMessenger
+        if (log.address.toLowerCase()===srcTransmit.toLowerCase()) {
+          const p=mtIface.parseLog(log);
+          if(p?.name==="MessageSent"){msgBytes=p.args.message;break;}
+        }
+      } catch{}
+    }
+    // fallback: try all logs
+    if (!msgBytes) {
+      for (const log of burnRc.logs) {
+        try { const p=mtIface.parseLog(log); if(p?.name==="MessageSent"){msgBytes=p.args.message;break;} } catch{}
+      }
+    }
     if (!msgBytes) throw new Error("MessageSent event not found.");
     stepsEl.children[1].innerHTML="⏳ Polling attestation (up to 2 min)…";
     setStatus("bridgeStatus","Step 2/3 — Waiting for Circle attestation…");
