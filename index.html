@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Arc Agent Forge — ERC-8004 Agent Registry UI</title>
-<meta name="description" content="Mint an on-chain identity for your AI agent on Arc Testnet. ERC-8004 identity, reputation, USDC transfers with memo & EURC swap."/>
+<meta name="description" content="Mint an on-chain identity for your AI agent on Arc Testnet. ERC-8004 identity, reputation, USDC transfers with memo, EURC swap & Pyth-powered autonomous treasury."/>
 <meta property="og:title" content="Arc Agent Forge — ERC-8004 Agent Registry UI"/>
 <meta property="og:description" content="Register AI agents with on-chain identity on Arc Testnet. MetaMask only, no private keys."/>
 <style>
@@ -68,6 +68,20 @@ button:disabled{opacity:.45;cursor:not-allowed;}
 footer{text-align:center;font-size:12px;color:var(--mut);margin-top:28px;line-height:1.9;}
 footer a{color:var(--acc);text-decoration:none;}
 code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12px;color:var(--acc2);}
+/* Treasury tab */
+.alloc-bar{height:22px;border-radius:11px;background:#0d0905;overflow:hidden;display:flex;margin:12px 0 6px;border:1px solid var(--line);}
+.alloc-bar .au{background:linear-gradient(90deg,#e07b00,#ffb13d);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#1c0f02;transition:width .5s;white-space:nowrap;overflow:hidden;}
+.alloc-bar .ae{background:linear-gradient(90deg,#0a6640,#12cc70);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;transition:width .5s;white-space:nowrap;overflow:hidden;}
+.alloc-target{font-size:11px;color:var(--mut);text-align:center;margin-bottom:10px;}
+.stress-row{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:13px;}
+.sdot{width:13px;height:13px;border-radius:50%;flex-shrink:0;background:var(--mut);}
+.sdot.calm{background:var(--ok);box-shadow:0 0 9px var(--ok);}
+.sdot.elev{background:var(--acc2);box-shadow:0 0 9px var(--acc2);}
+.sdot.high{background:var(--bad);box-shadow:0 0 9px var(--bad);}
+.tlog{background:#0d0905;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:monospace;font-size:11.5px;max-height:190px;overflow-y:auto;white-space:pre-wrap;margin-top:12px;line-height:1.7;}
+.tlog .t{color:var(--mut);} .tlog .ok{color:var(--ok);} .tlog .wn{color:var(--acc2);} .tlog .er{color:var(--bad);}
+.switchrow{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:13px;color:var(--mut);}
+.switchrow input{width:auto;}
 </style>
 </head>
 <body>
@@ -77,7 +91,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <div class="anvil">⚒️</div>
     <div>
       <h1>Arc <b>Agent Forge</b></h1>
-      <div class="sub">ERC-8004 Identity · USDC Transfers · EURC Swap · Arc Testnet</div>
+      <div class="sub">ERC-8004 Identity · Pyth Treasury · USDC Transfers · Arc Testnet</div>
     </div>
   </div>
   <span class="pill" id="connPill">Connect MetaMask</span>
@@ -90,6 +104,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
   <button class="tab" data-tab="transfer">💸 Transfer</button>
   <button class="tab" data-tab="swap">🔄 EURC Swap</button>
   <button class="tab" data-tab="jobs">📋 Jobs</button>
+  <button class="tab" data-tab="treasury">🏦 Treasury</button>
 </nav>
 
 <!-- FORGE -->
@@ -293,6 +308,71 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
   </section>
 </div>
 
+<!-- TREASURY -->
+<div class="tabpane" id="tab-treasury">
+  <section class="card">
+    <h2><span class="badge">PYTH</span> Autonomous Treasury Agent</h2>
+    <p class="note">A multi-currency treasury that manages itself. The agent reads the <b>EUR/USD</b> price <b>and its confidence interval</b> from Pyth on-chain. Calm market → it rebalances USDC/EURC toward the target ratio. Stressed market (wide confidence) → it defers and waits. Volatility-aware, fully on-chain.</p>
+    <div class="balances">
+      <div class="bal-chip"><div class="sym">EUR/USD (Pyth)</div><div class="amt" id="pyPrice">—</div></div>
+      <div class="bal-chip"><div class="sym">Uncertainty</div><div class="amt" id="pyConf">—</div></div>
+    </div>
+    <div class="stress-row"><div class="sdot" id="pyDot"></div><span id="pyStress">waiting for feed…</span></div>
+    <div class="balances" style="margin-top:8px;">
+      <div class="bal-chip"><div class="sym">Treasury USDC</div><div class="amt" id="trUsdc">—</div></div>
+      <div class="bal-chip"><div class="sym">Treasury EURC</div><div class="amt" id="trEurc">—</div></div>
+      <div class="bal-chip"><div class="sym">Total (USDC)</div><div class="amt" id="trTotal">—</div></div>
+    </div>
+    <div class="alloc-bar"><div class="au" id="allocU" style="width:50%">USDC</div><div class="ae" id="allocE" style="width:50%">EURC</div></div>
+    <div class="alloc-target" id="allocTarget">target: —</div>
+    <div style="font-size:13px;margin:6px 0;">Agent decision: <b id="trDecision" style="color:var(--acc2)">—</b></div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="green" id="trRunBtn">▶ Run agent once</button>
+      <button class="ghost" id="trRefreshBtn">↻ Refresh</button>
+    </div>
+    <div class="switchrow">
+      <input type="checkbox" id="trAuto"/>
+      <label for="trAuto" style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;">Autonomous mode — checks every 30s, only transacts when needed</label>
+    </div>
+    <div class="tlog" id="trLog"><span class="t">[ready]</span> Agent idle. Deploy contract & fund the treasury to start.</div>
+    <div class="status" id="trStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2>💰 Fund treasury</h2>
+    <p class="note">Deposit USDC / EURC into the agent's treasury. Tip for the demo: fund it off-target (e.g. 70 USDC + 50 EURC) so the agent has something to fix.</p>
+    <div class="row">
+      <div><label>Deposit amount</label><input id="trDepAmt" placeholder="50.00" inputmode="decimal"/></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="ghost" id="trDepUsdc">＋ Deposit USDC</button>
+      <button class="ghost" id="trDepEurc">＋ Deposit EURC</button>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <div><label>Withdraw amount (owner)</label><input id="trWdAmt" placeholder="10.00" inputmode="decimal"/></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="ghost" id="trWdUsdc">－ Withdraw USDC</button>
+      <button class="ghost" id="trWdEurc">－ Withdraw EURC</button>
+    </div>
+    <div class="status" id="trFundStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2>⚙️ Agent parameters <span style="font-size:10px;color:var(--mut);font-weight:400;">(owner only)</span></h2>
+    <div class="row">
+      <div><label>Target USDC %</label><input id="trPTarget" placeholder="70" inputmode="numeric"/></div>
+      <div><label>Drift threshold %</label><input id="trPDrift" placeholder="3" inputmode="decimal"/></div>
+      <div><label>Max uncertainty (bps)</label><input id="trPConf" placeholder="50" inputmode="numeric"/></div>
+    </div>
+    <div style="margin-top:14px;">
+      <button id="trParamsBtn">Save parameters</button>
+    </div>
+    <div class="status" id="trParamStatus"></div>
+    <p class="note" style="margin-top:12px;">Rebalance mechanics: you act as the keeper — the treasury sells its excess token to you at the on-chain Pyth rate <b>+0.10% bonus</b>, pulling the counter-token from your wallet (auto-approve handled). Pyth update fee is paid inside the tx in native USDC.</p>
+  </section>
+</div>
+
 <footer>
   Built by <a href="https://x.com/Dnyelfy" target="_blank" rel="noreferrer">@Dnyelfy</a> · ERC-8004 on Arc Testnet · IdentityRegistry <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">0x8004A8…BD9e</a><br/>
   More tools → <a href="https://arc-wallet-check.vercel.app" target="_blank" rel="noreferrer">⚡ Wallet Check</a> · <a href="https://arcvote-one.vercel.app/arc-dapp.html" target="_blank" rel="noreferrer">☀️ Quest Hub</a>
@@ -300,7 +380,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
 </div>
 
 <script type="module">
-import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue } from "https://esm.sh/ethers@6.13.4";
+import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue, MaxUint256 } from "https://esm.sh/ethers@6.13.4";
 
 const ARC_CHAIN_ID = "0x4cef52";
 const SEP_CHAIN_ID = "0xaa36a7";
@@ -316,9 +396,15 @@ const USDC_ARC   = "0x3600000000000000000000000000000000000000";
 const EURC_ARC   = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
 const JOB_ADDR   = "0x0747EEf0706327138c69792bF28Cd525089e4583";
 
+/* ── TREASURY AGENT CONFIG ── deploy TreasuryAgent.sol, adresi buraya yaz: */
+const TREASURY_ADDR = "0xC99f4c415C7d9e2bafDC04C43500131fDb43eA53";
+const PYTH_ADDR     = "0x2880aB155794e7179c9eE2e38200202908C17B43";
+const EUR_USD_FEED  = "0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b";
+const HERMES        = "https://hermes.pyth.network";
+
 const ID_ABI = ["function register(string metadataURI)","event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"];
 const REP_ABI = ["function giveFeedback(uint256 agentId,int128 score,uint8 feedbackType,string tag,string metadataURI,string evidenceURI,string comment,bytes32 feedbackHash)"];
-const ERC20_ABI = ["function balanceOf(address) view returns (uint256)","function transfer(address to,uint256 amount) returns (bool)","function approve(address spender,uint256 amount) returns (bool)"];
+const ERC20_ABI = ["function balanceOf(address) view returns (uint256)","function transfer(address to,uint256 amount) returns (bool)","function approve(address spender,uint256 amount) returns (bool)","function allowance(address owner,address spender) view returns (uint256)"];
 const MEMO_ABI = ["function memo(address target,bytes data,bytes32 memoId,bytes memoData)","event Memo(address indexed sender,address indexed target,bytes32 callDataHash,bytes32 indexed memoId,bytes memo,uint256 memoIndex)"];
 const JOB_ABI = [
   "function createJob(address provider,address evaluator,uint256 expiredAt,string description,address hook) returns (uint256)",
@@ -329,6 +415,18 @@ const JOB_ABI = [
   "function reject(uint256 jobId,bytes32 reason,bytes optParams)",
   "event JobCreated(uint256 indexed jobId,address indexed client,address indexed provider,address evaluator,uint256 expiredAt,address hook)"
 ];
+const TREASURY_ABI = [
+  "function rebalance(bytes[] updateData) payable",
+  "function deposit(address token,uint256 amount)",
+  "function withdraw(address token,uint256 amount)",
+  "function setParams(uint16 targetUsdcBps,uint16 driftBps,uint16 maxConfBps,uint16 keeperBonusBps,uint256 maxPriceAge)",
+  "function getStatus() view returns (uint256,uint256,uint16,uint16,uint16,uint16,bool)",
+  "function owner() view returns (address)",
+  "event Rebalanced(address indexed keeper,bool soldUsdc,uint256 amountOut,uint256 amountIn,int64 price,uint256 confBps)",
+  "event RebalanceDeferred(uint256 confBps,int64 price,string reason)",
+  "event AlreadyBalanced(uint256 currentUsdcBps,int64 price)"
+];
+const PYTH_ABI = ["function getUpdateFee(bytes[] updateData) view returns (uint256)"];
 
 let provider = null, signer = null, user = "";
 let eurUsd = 1.08;
@@ -348,6 +446,7 @@ document.querySelectorAll(".tab").forEach(btn => {
     document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
     btn.classList.add("active");
     if (btn.dataset.tab === "transfer" || btn.dataset.tab === "swap") loadBalances();
+    if (btn.dataset.tab === "treasury") { pythFetch(); trRefresh(); }
   });
 });
 
@@ -373,7 +472,7 @@ async function connect() {
     user = a;
     $("connPill").textContent = a.slice(0,6)+"…"+a.slice(-4)+" · Arc";
     $("connPill").classList.add("lit");
-    loadAgents(); loadBalances();
+    loadAgents(); loadBalances(); trRefresh();
   } catch(e) { alert("Rejected: "+(e.message||e)); }
 }
 
@@ -726,6 +825,228 @@ async function doSwap() {
   finally { $("swapBtn").disabled=false; }
 }
 
+// ── TREASURY AGENT (Pyth) ─────────────────────────────────────
+let pyLast = null;      // {price, conf, confBps, updateData}
+let trLast = null;      // getStatus snapshot
+let trAutoTimer = null;
+let trBusy = false;
+
+function trLog(msg, cls="t") {
+  const el = $("trLog");
+  const time = new Date().toLocaleTimeString("tr-TR");
+  el.innerHTML += `\n<span class="t">[${time}]</span> <span class="${cls}">${msg}</span>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function pythFetch() {
+  try {
+    const r = await fetch(`${HERMES}/v2/updates/price/latest?ids[]=${EUR_USD_FEED}`);
+    const d = await r.json();
+    const p = d.parsed[0].price;
+    const price = Number(p.price) * Math.pow(10, p.expo);
+    const conf  = Number(p.conf)  * Math.pow(10, p.expo);
+    const confBps = (conf / price) * 10000;
+    pyLast = { price, conf, confBps, updateData: ["0x" + d.binary.data[0]] };
+    $("pyPrice").textContent = price.toFixed(5);
+    $("pyConf").textContent = confBps.toFixed(1) + " bps";
+    const dot = $("pyDot");
+    dot.className = "sdot";
+    if (confBps <= 20)      { dot.classList.add("calm"); $("pyStress").textContent = "CALM — market normal, agent active"; }
+    else if (confBps <= 50) { dot.classList.add("elev"); $("pyStress").textContent = "ELEVATED — agent cautious"; }
+    else                    { dot.classList.add("high"); $("pyStress").textContent = "STRESSED — agent defers rebalancing"; }
+    trRender();
+  } catch(e) { $("pyStress").textContent = "Hermes error: " + e.message; }
+}
+
+async function trRefresh() {
+  if (!pyLast) { try { await pythFetch(); } catch{} }
+  if (!TREASURY_ADDR) { $("trDecision").textContent = "contract not deployed yet"; return; }
+  if (!provider) return;
+  try {
+    const c = new Contract(TREASURY_ADDR, TREASURY_ABI, provider);
+    const s = await c.getStatus();
+    trLast = {
+      usdcBal: parseFloat(formatUnits(s[0],6)),
+      eurcBal: parseFloat(formatUnits(s[1],6)),
+      targetBps: Number(s[2]), driftBps: Number(s[3]),
+      maxConfBps: Number(s[4]), bonusBps: Number(s[5]), paused: s[6]
+    };
+    trRender();
+  } catch(e) { trLog("getStatus error: " + (e.shortMessage||e.message), "er"); }
+}
+
+function trRender() {
+  if (!trLast || !pyLast) return;
+  const { usdcBal, eurcBal, targetBps, driftBps, maxConfBps } = trLast;
+  const eurcVal = eurcBal * pyLast.price;
+  const total = usdcBal + eurcVal;
+  $("trUsdc").textContent = usdcBal.toFixed(2);
+  $("trEurc").textContent = eurcBal.toFixed(2);
+  $("trTotal").textContent = total.toFixed(2);
+  const uPct = total > 0 ? (usdcBal/total)*100 : 50;
+  $("allocU").style.width = uPct + "%";
+  $("allocE").style.width = (100-uPct) + "%";
+  $("allocU").textContent = "USDC " + uPct.toFixed(1) + "%";
+  $("allocE").textContent = "EURC " + (100-uPct).toFixed(1) + "%";
+  $("allocTarget").textContent = `target: ${targetBps/100}% USDC / ${100-targetBps/100}% EURC · drift threshold ±${driftBps/100}%`;
+
+  const curBps = total > 0 ? (usdcBal/total)*10000 : 0;
+  const drift = Math.abs(curBps - targetBps);
+  let dec;
+  if (!TREASURY_ADDR) dec = "contract not deployed";
+  else if (total === 0) dec = "treasury empty — fund it";
+  else if (pyLast.confBps > maxConfBps) dec = "⏸ DEFER (market stressed)";
+  else if (drift <= driftBps) dec = "✓ BALANCED (no action)";
+  else dec = curBps > targetBps ? "⚡ REBALANCE: sell USDC → buy EURC" : "⚡ REBALANCE: sell EURC → buy USDC";
+  $("trDecision").textContent = dec;
+}
+
+async function trEnsureAllowance(tokenAddr, amountHuman) {
+  const token = new Contract(tokenAddr, ERC20_ABI, signer);
+  const needed = parseUnits(amountHuman.toFixed(6), 6);
+  const cur = await token.allowance(user, TREASURY_ADDR);
+  if (cur >= needed) return;
+  trLog("Approve required…");
+  const tx = await token.approve(TREASURY_ADDR, MaxUint256);
+  await tx.wait();
+  trLog("Approve done.", "ok");
+}
+
+async function trRun() {
+  if (trBusy) return;
+  if (!TREASURY_ADDR) { setStatus("trStatus","Deploy TreasuryAgent.sol and set TREASURY_ADDR in index.html.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  trBusy = true;
+  $("trRunBtn").disabled = true;
+  try {
+    await pythFetch();
+    await trRefresh();
+    const { usdcBal, eurcBal, targetBps, driftBps, maxConfBps, paused } = trLast;
+    if (paused) { trLog("Agent is paused by owner.", "wn"); return; }
+    const eurcVal = eurcBal * pyLast.price;
+    const total = usdcBal + eurcVal;
+    if (total === 0) { trLog("Treasury empty — deposit first.", "wn"); return; }
+
+    const curBps = (usdcBal/total)*10000;
+    const drift = Math.abs(curBps - targetBps);
+
+    if (pyLast.confBps > maxConfBps) {
+      trLog(`Decision: DEFER. Uncertainty ${pyLast.confBps.toFixed(1)} bps > limit ${maxConfBps} bps. Market stressed — waiting.`, "wn");
+      return;
+    }
+    if (drift <= driftBps) {
+      trLog(`Decision: BALANCED. Drift ${(drift/100).toFixed(2)}% ≤ threshold ${(driftBps/100)}%. No action.`, "t");
+      return;
+    }
+
+    const sellingUsdc = curBps > targetBps;
+    const excessValue = (drift/10000) * total; // in USDC terms
+    if (sellingUsdc) {
+      const eurcNeeded = excessValue / pyLast.price;
+      trLog(`Decision: REBALANCE. Treasury sells ~${excessValue.toFixed(2)} USDC — pulling ~${eurcNeeded.toFixed(2)} EURC from you (+bonus in USDC).`, "wn");
+      await trEnsureAllowance(EURC_ARC, eurcNeeded * 1.02);
+    } else {
+      trLog(`Decision: REBALANCE. Treasury sells EURC — pulling ~${excessValue.toFixed(2)} USDC from you (+bonus in EURC).`, "wn");
+      await trEnsureAllowance(USDC_ARC, excessValue * 1.02);
+    }
+
+    const pyth = new Contract(PYTH_ADDR, PYTH_ABI, provider);
+    const fee = await pyth.getUpdateFee(pyLast.updateData);
+    setStatus("trStatus","Confirm rebalance in MetaMask…");
+    const c = new Contract(TREASURY_ADDR, TREASURY_ABI, signer);
+    const tx = await c.rebalance(pyLast.updateData, { value: fee });
+    trLog("Tx sent: " + tx.hash.slice(0,14) + "…");
+    setStatus("trStatus","⏳ Rebalancing on-chain…");
+    const rc = await tx.wait();
+
+    const iface = new Interface(TREASURY_ABI);
+    let logged = false;
+    for (const log of rc.logs) {
+      try {
+        const p = iface.parseLog(log);
+        if (p?.name === "Rebalanced") { trLog("✓ REBALANCED — price verified on-chain via Pyth, treasury moved to target.", "ok"); logged = true; }
+        if (p?.name === "RebalanceDeferred") { trLog("⏸ Contract deferred: " + p.args.reason, "wn"); logged = true; }
+        if (p?.name === "AlreadyBalanced") { trLog("✓ Contract says: already balanced.", "t"); logged = true; }
+      } catch{}
+    }
+    if (!logged) trLog("Tx confirmed.", "ok");
+    setStatus("trStatus","✓ Done",false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    await trRefresh();
+    loadBalances();
+  } catch(e) {
+    trLog("Error: " + (e.shortMessage||e.message||e).toString().slice(0,110), "er");
+    setStatus("trStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true);
+  } finally {
+    trBusy = false;
+    $("trRunBtn").disabled = false;
+  }
+}
+
+async function trDeposit(tokenAddr, sym) {
+  if (!TREASURY_ADDR) { setStatus("trFundStatus","Deploy the contract first.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const amt = parseFloat($("trDepAmt").value);
+  if (!amt||isNaN(amt)) { setStatus("trFundStatus","Enter a valid amount.",true); return; }
+  try {
+    await trEnsureAllowance(tokenAddr, amt);
+    setStatus("trFundStatus",`Confirm deposit of ${amt} ${sym}…`);
+    const c = new Contract(TREASURY_ADDR, TREASURY_ABI, signer);
+    const tx = await c.deposit(tokenAddr, parseUnits(amt.toFixed(6),6));
+    const rc = await tx.wait();
+    setStatus("trFundStatus",`✓ Deposited ${amt} ${sym}`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    trLog(`Deposited ${amt} ${sym} into treasury.`, "ok");
+    trRefresh(); loadBalances();
+  } catch(e) { setStatus("trFundStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true); }
+}
+
+async function trWithdraw(tokenAddr, sym) {
+  if (!TREASURY_ADDR) { setStatus("trFundStatus","Deploy the contract first.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const amt = parseFloat($("trWdAmt").value);
+  if (!amt||isNaN(amt)) { setStatus("trFundStatus","Enter a valid amount.",true); return; }
+  try {
+    setStatus("trFundStatus",`Confirm withdraw of ${amt} ${sym}…`);
+    const c = new Contract(TREASURY_ADDR, TREASURY_ABI, signer);
+    const tx = await c.withdraw(tokenAddr, parseUnits(amt.toFixed(6),6));
+    const rc = await tx.wait();
+    setStatus("trFundStatus",`✓ Withdrew ${amt} ${sym}`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    trRefresh(); loadBalances();
+  } catch(e) { setStatus("trFundStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true); }
+}
+
+async function trSaveParams() {
+  if (!TREASURY_ADDR) { setStatus("trParamStatus","Deploy the contract first.",true); return; }
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  try {
+    const t = Math.round(parseFloat($("trPTarget").value || "70") * 100);
+    const d = Math.round(parseFloat($("trPDrift").value || "3") * 100);
+    const cf = Math.round(parseFloat($("trPConf").value || "50"));
+    const c = new Contract(TREASURY_ADDR, TREASURY_ABI, signer);
+    const s = await c.getStatus();
+    setStatus("trParamStatus","Confirm in MetaMask…");
+    const tx = await c.setParams(t, d, cf, Number(s[5]), 120);
+    const rc = await tx.wait();
+    setStatus("trParamStatus","✓ Parameters updated",false,`${ARC_EXPLORER}/tx/${rc.hash}`);
+    trLog(`Params updated: target ${t/100}% / drift ${d/100}% / max uncertainty ${cf} bps.`, "ok");
+    trRefresh();
+  } catch(e) { setStatus("trParamStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true); }
+}
+
+$("trAuto").addEventListener("change", e => {
+  if (e.target.checked) {
+    trLog("🤖 Autonomous mode ON — checking market every 30s.", "ok");
+    trAutoTimer = setInterval(() => trRun(), 30000);
+    trRun();
+  } else {
+    clearInterval(trAutoTimer);
+    trLog("Autonomous mode off.");
+  }
+});
+
 // ── EVENT BINDINGS ────────────────────────────────────────────
 $("connPill").addEventListener("click", connect);
 $("regBtn").addEventListener("click", registerAgent);
@@ -743,8 +1064,17 @@ $("rejectJobBtn").addEventListener("click", rejectJob);
 $("jTemplate").addEventListener("change", () => {
   $("jCustomDesc").style.display = $("jTemplate").value==="custom" ? "block" : "none";
 });
+$("trRunBtn").addEventListener("click", trRun);
+$("trRefreshBtn").addEventListener("click", trRefresh);
+$("trDepUsdc").addEventListener("click", () => trDeposit(USDC_ARC,"USDC"));
+$("trDepEurc").addEventListener("click", () => trDeposit(EURC_ARC,"EURC"));
+$("trWdUsdc").addEventListener("click", () => trWithdraw(USDC_ARC,"USDC"));
+$("trWdEurc").addEventListener("click", () => trWithdraw(EURC_ARC,"EURC"));
+$("trParamsBtn").addEventListener("click", trSaveParams);
 
 fetchRate();
+pythFetch();
+setInterval(pythFetch, 15000);
 
 if (window.ethereum) {
   window.ethereum.on?.("accountsChanged", ()=>location.reload());
