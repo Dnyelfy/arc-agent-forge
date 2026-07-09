@@ -419,7 +419,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
       <button class="green" id="laStartBtn">▶ Start agent</button>
       <button class="ghost" id="laStopBtn">■ Stop</button>
     </div>
-    <div class="tlog" id="laTerm" style="max-height:260px;"><span class="t">[boot]</span> Agent terminal ready. Fund gas, start the agent, then hire it below.</div>
+    <div class="tlog" id="laTerm" style="max-height:260px;"><span class="t">[boot]</span> Agent terminal ready — build v1.3. Fund gas, start the agent, then hire it below.</div>
   </section>
 
   <section class="card">
@@ -1260,92 +1260,88 @@ function laSetState(on) {
 async function agentTick() {
   if (!agentWallet || laBusy) return;
   laBusy = true;
+
+  // Stage 1 — discover external jobs via logs (best effort; failures never block the flow)
   try {
-    let latest;
-    try { latest = await agentRpc.getBlockNumber(); }
-    catch(e) { laLog("RPC unreachable this tick, retrying…", "er"); laBusy = false; return; }
-    const MAX_SPAN = 450; // Arc RPC rejects wide eth_getLogs ranges
+    let latest = await agentRpc.getBlockNumber();
+    const MAX_SPAN = 450;
     if (!laLastBlock) laLastBlock = Math.max(0, latest - MAX_SPAN);
     const iface = new Interface(JOB_ABI);
     let scanFrom = laLastBlock;
-    const collected = [];
     while (scanFrom <= latest) {
       const scanTo = Math.min(scanFrom + MAX_SPAN, latest);
-      try {
-        const chunk = await agentRpc.getLogs({
-          address: JOB_ADDR,
-          fromBlock: scanFrom,
-          toBlock: scanTo,
-          topics: [iface.getEvent("JobCreated").topicHash, null, null, zeroPadValue(agentWallet.address, 32)]
-        });
-        collected.push(...chunk);
-        scanFrom = scanTo + 1;
-        laLastBlock = scanFrom;
-      } catch(e) {
-        laLog(`log scan ${scanFrom}-${scanTo} failed, will retry next tick`, "er");
-        break;
-      }
-    }
-    {
-      const logs = collected;
-      for (const log of logs) {
+      const chunk = await agentRpc.getLogs({
+        address: JOB_ADDR,
+        fromBlock: scanFrom,
+        toBlock: scanTo,
+        topics: [iface.getEvent("JobCreated").topicHash, null, null, zeroPadValue(agentWallet.address, 32)]
+      });
+      for (const log of chunk) {
         let p; try { p = iface.parseLog(log); } catch { continue; }
         const id = p.args.jobId.toString();
         if (liveJobs[id]) continue;
-        const desc = p.args.description;
-        const price = agentPricing(desc);
-        liveJobs[id] = { phase: "created", desc, price };
-        laLog(`📥 New job #${id} assigned to me: "${desc.slice(0,70)}"`);
-        laLog(`🧮 My pricing decision: ${price} USDC. Setting budget on-chain…`);
-        try {
-          const c = new Contract(JOB_ADDR, JOB_ABI, agentWallet);
-          const tx = await c.setBudget(id, parseUnits(String(price), 6), "0x");
-          await tx.wait();
-          liveJobs[id].phase = "priced";
-          laLog(`✓ Budget set for job #${id} — I called setBudget myself, as the provider. Waiting for client escrow…`, "ok");
-        } catch(e) {
-          laLog("setBudget failed: " + (e.shortMessage||e.message||"").slice(0,90) + (String(e.message||"").includes("insufficient") ? " — fund my gas!" : ""), "er");
-          delete liveJobs[id];
-        }
-        laClientUiUpdate();
+        liveJobs[id] = { phase: "created", desc: p.args.description };
+        laLog(`📥 New job #${id} assigned to me: "${p.args.description.slice(0,70)}"`);
       }
+      scanFrom = scanTo + 1;
+      laLastBlock = scanFrom;
     }
-    // funded? -> produce & submit
-    for (const [id, j] of Object.entries(liveJobs)) {
-      if (j.phase !== "priced") continue;
+  } catch(e) { /* log scan unreliable on this RPC — direct handoff covers in-page jobs */ }
+
+  // Stage 2 — price newly created jobs (I call setBudget myself, as the provider)
+  for (const [id, j] of Object.entries(liveJobs)) {
+    if (j.phase !== "created") continue;
+    j.price = j.price ?? agentPricing(j.desc);
+    laLog(`🧮 My pricing decision for job #${id}: ${j.price} USDC. Setting budget on-chain…`);
+    try {
+      const c = new Contract(JOB_ADDR, JOB_ABI, agentWallet);
+      const tx = await c.setBudget(id, parseUnits(String(j.price), 6), "0x");
+      await tx.wait();
+      j.phase = "priced";
+      laLog(`✓ Budget set for job #${id}. Waiting for client escrow…`, "ok");
+    } catch(e) {
+      laLog("setBudget failed: " + (e.shortMessage||e.message||"").slice(0,90) + (String(e.message||"").includes("insufficient") ? " — fund my gas!" : ""), "er");
+    }
+    laClientUiUpdate();
+  }
+
+  // Stage 3 — funded? produce & submit
+  for (const [id, j] of Object.entries(liveJobs)) {
+    if (j.phase !== "priced") continue;
+    try {
       const c = new Contract(JOB_ADDR, JOB_ABI, agentWallet);
       if (!j.deliverable) j.deliverable = agentGenerate(j.desc);
       const h = keccak256(toUtf8Bytes(j.deliverable));
       try { await c.submit.staticCall(id, h, "0x"); }
       catch { continue; } // escrow not funded yet
       laLog(`⚙️ Escrow detected for job #${id}. Producing deliverable & submitting…`);
-      try {
-        const tx = await c.submit(id, h, "0x");
-        await tx.wait();
-        j.phase = "submitted";
-        laLog(`✓ Deliverable submitted for job #${id}. Proof hash: ${h.slice(0,16)}… Awaiting client approval.`, "ok");
-        laLog("— deliverable preview —\n" + j.deliverable, "t");
-      } catch(e) { laLog("submit failed: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
+      const tx = await c.submit(id, h, "0x");
+      await tx.wait();
+      j.phase = "submitted";
+      laLog(`✓ Deliverable submitted for job #${id}. Proof hash: ${h.slice(0,16)}… Awaiting client approval.`, "ok");
+      laLog("— deliverable preview —\n" + j.deliverable, "t");
       laClientUiUpdate();
+    } catch(e) { laLog("submit failed: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
+  }
+
+  // Stage 4 — ArcSub keeper duty: collect due subscriptions
+  try {
+    const sub = new Contract(ARCSUB_ADDR, ARCSUB_ABI, agentWallet);
+    const maxId = Number(await sub.nextId());
+    const now = Math.floor(Date.now() / 1000);
+    for (let id = 1; id < Math.min(maxId, 200); id++) {
+      let s; try { s = await sub.getSub(id); } catch { continue; }
+      if (!s.active || now < Number(s.nextChargeAt)) continue;
+      laLog(`🔁 Subscription #${id} ("${s.label}") is due — collecting ${formatUnits(s.amount,6)} USDC for ${s.merchant.slice(0,8)}…`);
+      try {
+        const tx = await sub.charge(id);
+        await tx.wait();
+        laLog(`✓ Subscription #${id} charged autonomously. Merchant paid, next cycle scheduled.`, "ok");
+      } catch(e) { laLog(`Subscription #${id} charge failed: ` + (e.shortMessage||e.message||"").slice(0,70), "er"); }
     }
-    // ── ArcSub keeper duty: collect due subscriptions, no human involved ──
-    try {
-      const sub = new Contract(ARCSUB_ADDR, ARCSUB_ABI, agentWallet);
-      const maxId = Number(await sub.nextId());
-      const now = Math.floor(Date.now() / 1000);
-      for (let id = 1; id < Math.min(maxId, 200); id++) {
-        let s; try { s = await sub.getSub(id); } catch { continue; }
-        if (!s.active || now < Number(s.nextChargeAt)) continue;
-        laLog(`🔁 Subscription #${id} ("${s.label}") is due — collecting ${formatUnits(s.amount,6)} USDC for ${s.merchant.slice(0,8)}…`);
-        try {
-          const tx = await sub.charge(id);
-          await tx.wait();
-          laLog(`✓ Subscription #${id} charged autonomously. Merchant paid, next cycle scheduled.`, "ok");
-        } catch(e) { laLog(`Subscription #${id} charge failed: ` + (e.shortMessage||e.message||"").slice(0,70), "er"); }
-      }
-    } catch {}
-    agentBalances();
-  } catch(e) { laLog("tick error: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
+  } catch {}
+
+  agentBalances();
   laBusy = false;
 }
 
@@ -1353,7 +1349,7 @@ function laStart() {
   agentInit();
   if (laTimer) return;
   laSetState(true);
-  laLog("▶ Agent started. Polling the chain every 5s.", "ok");
+  laLog("▶ Agent started (build v1.3, batch-safe RPC). Polling every 5s.", "ok");
   laTimer = setInterval(agentTick, 5000);
   agentTick();
 }
@@ -1440,6 +1436,10 @@ async function laHire() {
     for (const log of rc.logs) { try { const p = iface.parseLog(log); if (p?.name === "JobCreated") id = p.args.jobId.toString(); } catch{} }
     if (!id) throw new Error("Job ID not found");
     laClientJob = id;
+    if (!liveJobs[id]) {
+      liveJobs[id] = { phase: "created", desc };
+      laLog(`📥 Job #${id} received directly from the client page — no log scan needed.`);
+    }
     if (rc.blockNumber) laLastBlock = laLastBlock ? Math.min(laLastBlock, rc.blockNumber) : rc.blockNumber;
     setStatus("laHireStatus", `✓ Job #${id} posted to your agent. Watch the terminal.`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
     laClientUiUpdate();
