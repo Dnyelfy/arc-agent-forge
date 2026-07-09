@@ -105,6 +105,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
   <button class="tab" data-tab="swap">🔄 EURC Swap</button>
   <button class="tab" data-tab="jobs">📋 Jobs</button>
   <button class="tab" data-tab="treasury">🏦 Treasury</button>
+  <button class="tab" data-tab="live">🧠 Live Agent</button>
 </nav>
 
 <!-- FORGE -->
@@ -342,11 +343,16 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <h2>💰 Fund treasury</h2>
     <p class="note">Deposit USDC / EURC into the agent's treasury. Tip for the demo: fund it off-target (e.g. 70 USDC + 50 EURC) so the agent has something to fix.</p>
     <div class="row">
-      <div><label>Deposit amount</label><input id="trDepAmt" placeholder="50.00" inputmode="decimal"/></div>
-    </div>
-    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button class="ghost" id="trDepUsdc">＋ Deposit USDC</button>
-      <button class="ghost" id="trDepEurc">＋ Deposit EURC</button>
+      <div>
+        <label>USDC amount</label>
+        <input id="trDepAmtUsdc" placeholder="70.00" inputmode="decimal"/>
+        <div style="margin-top:8px;"><button class="ghost" id="trDepUsdc" style="width:100%;">＋ Deposit USDC</button></div>
+      </div>
+      <div>
+        <label>EURC amount</label>
+        <input id="trDepAmtEurc" placeholder="50.00" inputmode="decimal"/>
+        <div style="margin-top:8px;"><button class="ghost" id="trDepEurc" style="width:100%;">＋ Deposit EURC</button></div>
+      </div>
     </div>
     <div class="row" style="margin-top:14px;">
       <div><label>Withdraw amount (owner)</label><input id="trWdAmt" placeholder="10.00" inputmode="decimal"/></div>
@@ -373,6 +379,66 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
   </section>
 </div>
 
+
+<!-- LIVE AGENT -->
+<div class="tabpane" id="tab-live">
+  <section class="card">
+    <h2><span class="badge">AUTONOMOUS</span> Live Agent Worker</h2>
+    <p class="note">A real on-chain worker with its <b>own wallet</b>. It watches the ERC-8183 Jobs contract; when a job is assigned to it, the agent <b>prices it, waits for escrow, produces the deliverable and submits — with zero human clicks</b>. As the provider itself, it calls <code>setBudget</code> natively (yes, that fixes the old single-wallet bug). Burner key lives only in this browser — testnet use only.</p>
+    <div class="balances">
+      <div class="bal-chip"><div class="sym">Agent address</div><div class="amt" id="laAddr" style="font-size:12.5px;word-break:break-all;">—</div></div>
+      <div class="bal-chip"><div class="sym">Gas (native USDC)</div><div class="amt" id="laGas">—</div></div>
+      <div class="bal-chip"><div class="sym">Earned (USDC)</div><div class="amt" id="laEarned">—</div></div>
+    </div>
+    <div class="row">
+      <div><label>Fund gas amount</label><input id="laGasAmt" placeholder="1.00" inputmode="decimal"/></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="ghost" id="laFundGasBtn">⛽ Fund agent gas</button>
+      <button class="ghost" id="laSweepBtn">💸 Sweep earnings to my wallet</button>
+      <button class="ghost" id="laResetBtn">🗑 New agent key</button>
+    </div>
+    <div class="status" id="laWalletStatus"></div>
+  </section>
+
+  <section class="card">
+    <h2>🧠 Agent brain</h2>
+    <div class="stress-row"><div class="sdot" id="laDot"></div><span id="laState">agent offline</span></div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="green" id="laStartBtn">▶ Start agent</button>
+      <button class="ghost" id="laStopBtn">■ Stop</button>
+    </div>
+    <div class="tlog" id="laTerm" style="max-height:260px;"><span class="t">[boot]</span> Agent terminal ready. Fund gas, start the agent, then hire it below.</div>
+  </section>
+
+  <section class="card">
+    <h2>🧑‍💼 Hire your agent <span style="font-size:10px;color:var(--mut);font-weight:400;">(you = client, MetaMask)</span></h2>
+    <p class="note">Post a job assigned to the agent's address. Then watch the terminal: the agent prices it on its own. You only escrow and, at the end, approve the work.</p>
+    <label>Task</label>
+    <select id="laTemplate">
+      <option value="Write a market brief on stablecoin payments in Asia.">📊 Market research brief</option>
+      <option value="Analyze the provided dataset and return key insights.">📈 Data analysis</option>
+      <option value="Generate social media content for a product launch.">✍️ Content generation</option>
+      <option value="Audit the smart contract for common vulnerabilities.">🔒 Code / security review</option>
+      <option value="custom">✏️ Custom task…</option>
+    </select>
+    <input id="laCustomDesc" placeholder="Describe the task…" style="display:none;margin-top:8px;"/>
+    <div style="margin-top:14px;">
+      <button id="laHireBtn">🚀 Post job to my agent</button>
+    </div>
+    <div class="status" id="laHireStatus"></div>
+    <div id="laDealBox" style="display:none;margin-top:14px;padding:14px;background:#0d0905;border:1px solid var(--line);border-radius:12px;">
+      <div style="font-size:13px;color:var(--mut);">Job <b id="laDealId" style="color:var(--acc)">—</b> · Phase: <b id="laDealPhase" style="color:var(--acc2)">—</b></div>
+      <div style="font-size:13px;margin-top:6px;">Agent's price: <b id="laDealPrice" style="color:var(--acc2)">waiting for agent…</b></div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="green" id="laFundJobBtn" disabled>💰 Approve & escrow</button>
+        <button class="blue" id="laReleaseBtn" disabled>✅ Approve work & pay agent</button>
+      </div>
+      <div class="status" id="laDealStatus"></div>
+    </div>
+  </section>
+</div>
+
 <footer>
   Built by <a href="https://x.com/Dnyelfy" target="_blank" rel="noreferrer">@Dnyelfy</a> · ERC-8004 on Arc Testnet · IdentityRegistry <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">0x8004A8…BD9e</a><br/>
   More tools → <a href="https://arc-wallet-check.vercel.app" target="_blank" rel="noreferrer">⚡ Wallet Check</a> · <a href="https://arcvote-one.vercel.app/arc-dapp.html" target="_blank" rel="noreferrer">☀️ Quest Hub</a>
@@ -380,7 +446,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
 </div>
 
 <script type="module">
-import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue, MaxUint256 } from "https://esm.sh/ethers@6.13.4";
+import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue, MaxUint256, Wallet, JsonRpcProvider, parseEther, formatEther } from "https://esm.sh/ethers@6.13.4";
 
 const ARC_CHAIN_ID = "0x4cef52";
 const SEP_CHAIN_ID = "0xaa36a7";
@@ -447,6 +513,7 @@ document.querySelectorAll(".tab").forEach(btn => {
     btn.classList.add("active");
     if (btn.dataset.tab === "transfer" || btn.dataset.tab === "swap") loadBalances();
     if (btn.dataset.tab === "treasury") { pythFetch(); trRefresh(); }
+    if (btn.dataset.tab === "live") { agentInit(); agentBalances(); }
   });
 });
 
@@ -983,11 +1050,11 @@ async function trRun() {
   }
 }
 
-async function trDeposit(tokenAddr, sym) {
+async function trDeposit(tokenAddr, sym, inputId) {
   if (!TREASURY_ADDR) { setStatus("trFundStatus","Deploy the contract first.",true); return; }
   if (!signer) { await connect(); if (!signer) return; }
   await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
-  const amt = parseFloat($("trDepAmt").value);
+  const amt = parseFloat($(inputId).value);
   if (!amt||isNaN(amt)) { setStatus("trFundStatus","Enter a valid amount.",true); return; }
   try {
     await trEnsureAllowance(tokenAddr, amt);
@@ -1047,6 +1114,271 @@ $("trAuto").addEventListener("change", e => {
   }
 });
 
+// ── LIVE AGENT WORKER ─────────────────────────────────────────
+const LA_KEY_STORE = "forgeAgentKey_v1";
+let agentWallet = null, agentRpc = null;
+let laTimer = null, laBusy = false, laLastBlock = 0;
+let liveJobs = {};        // jobId -> {phase, desc, price, deliverable}
+let laClientJob = null;   // jobId the client (MetaMask user) is tracking
+
+function laLog(msg, cls="t") {
+  const el = $("laTerm");
+  const time = new Date().toLocaleTimeString("tr-TR");
+  el.innerHTML += `\n<span class="t">[${time}]</span> <span class="${cls}">${msg}</span>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function agentInit() {
+  if (agentWallet) { $("laAddr").textContent = agentWallet.address; return; }
+  agentRpc = new JsonRpcProvider(ARC_RPC);
+  let key = localStorage.getItem(LA_KEY_STORE);
+  if (!key) {
+    const w = Wallet.createRandom();
+    key = w.privateKey;
+    localStorage.setItem(LA_KEY_STORE, key);
+    laLog("🔑 New agent wallet generated (key stored in this browser only).", "wn");
+  }
+  agentWallet = new Wallet(key, agentRpc);
+  $("laAddr").textContent = agentWallet.address;
+}
+
+async function agentBalances() {
+  if (!agentWallet) return;
+  try {
+    const gas = await agentRpc.getBalance(agentWallet.address);
+    const usdcC = new Contract(USDC_ARC, ERC20_ABI, agentRpc);
+    const earned = await usdcC.balanceOf(agentWallet.address);
+    $("laGas").textContent = parseFloat(formatEther(gas)).toFixed(3);
+    $("laEarned").textContent = parseFloat(formatUnits(earned, 6)).toFixed(2);
+  } catch {}
+}
+
+function agentPricing(desc) {
+  const d = desc.toLowerCase();
+  if (d.includes("audit") || d.includes("security")) return 3;
+  if (d.includes("research") || d.includes("market")) return 2;
+  if (d.includes("analy") || d.includes("data")) return 2;
+  if (d.includes("content") || d.includes("social")) return 1.5;
+  return 1;
+}
+
+function agentGenerate(desc) {
+  const d = desc.toLowerCase();
+  let body;
+  if (d.includes("audit") || d.includes("security"))
+    body = "Findings: 1) External transfer paths should follow checks-effects-interactions; add reentrancy guards where state changes follow calls. 2) Owner privileges are broad — consider a timelock. 3) Solidity >=0.8 rules out silent overflow. Overall severity: LOW-MED.";
+  else if (d.includes("research") || d.includes("market") || d.includes("brief"))
+    body = "Key points: 1) Stablecoin settlement volume keeps shifting toward payment-native L1s. 2) USDC-as-gas removes onboarding friction for enterprises. 3) Recommendation: pilot recurring B2B payouts on Arc testnet ahead of mainnet.";
+  else if (d.includes("analy") || d.includes("data"))
+    body = "Analysis: distribution is right-skewed; the top decile drives ~62% of volume. Recommend cohort segmentation and weekly anomaly alerts on settlement latency.";
+  else if (d.includes("content") || d.includes("social"))
+    body = "Draft post: 'Payments that settle themselves. Autonomous USDC flows are live on Arc — no humans in the loop, every step on-chain.' Two alternate hooks included in package.";
+  else
+    body = "Task completed per specification. Output package prepared, validated and hashed for on-chain proof.";
+  return "AGENT DELIVERABLE\nJob: " + desc + "\nAgent: " + agentWallet.address + "\nTime: " + new Date().toISOString() + "\n---\n" + body;
+}
+
+function laSetState(on) {
+  const dot = $("laDot");
+  dot.className = "sdot" + (on ? " calm" : "");
+  $("laState").textContent = on ? "agent ONLINE — watching the Jobs contract" : "agent offline";
+}
+
+async function agentTick() {
+  if (!agentWallet || laBusy) return;
+  laBusy = true;
+  try {
+    const latest = await agentRpc.getBlockNumber();
+    if (!laLastBlock) laLastBlock = Math.max(0, latest - 3000);
+    const iface = new Interface(JOB_ABI);
+    if (latest >= laLastBlock) {
+      const logs = await agentRpc.getLogs({
+        address: JOB_ADDR,
+        fromBlock: laLastBlock,
+        toBlock: latest,
+        topics: [iface.getEvent("JobCreated").topicHash, null, null, zeroPadValue(agentWallet.address, 32)]
+      });
+      laLastBlock = latest + 1;
+      for (const log of logs) {
+        let p; try { p = iface.parseLog(log); } catch { continue; }
+        const id = p.args.jobId.toString();
+        if (liveJobs[id]) continue;
+        const desc = p.args.description;
+        const price = agentPricing(desc);
+        liveJobs[id] = { phase: "created", desc, price };
+        laLog(`📥 New job #${id} assigned to me: "${desc.slice(0,70)}"`);
+        laLog(`🧮 My pricing decision: ${price} USDC. Setting budget on-chain…`);
+        try {
+          const c = new Contract(JOB_ADDR, JOB_ABI, agentWallet);
+          const tx = await c.setBudget(id, parseUnits(String(price), 6), "0x");
+          await tx.wait();
+          liveJobs[id].phase = "priced";
+          laLog(`✓ Budget set for job #${id} — I called setBudget myself, as the provider. Waiting for client escrow…`, "ok");
+        } catch(e) {
+          laLog("setBudget failed: " + (e.shortMessage||e.message||"").slice(0,90) + (String(e.message||"").includes("insufficient") ? " — fund my gas!" : ""), "er");
+          delete liveJobs[id];
+        }
+        laClientUiUpdate();
+      }
+    }
+    // funded? -> produce & submit
+    for (const [id, j] of Object.entries(liveJobs)) {
+      if (j.phase !== "priced") continue;
+      const c = new Contract(JOB_ADDR, JOB_ABI, agentWallet);
+      if (!j.deliverable) j.deliverable = agentGenerate(j.desc);
+      const h = keccak256(toUtf8Bytes(j.deliverable));
+      try { await c.submit.staticCall(id, h, "0x"); }
+      catch { continue; } // escrow not funded yet
+      laLog(`⚙️ Escrow detected for job #${id}. Producing deliverable & submitting…`);
+      try {
+        const tx = await c.submit(id, h, "0x");
+        await tx.wait();
+        j.phase = "submitted";
+        laLog(`✓ Deliverable submitted for job #${id}. Proof hash: ${h.slice(0,16)}… Awaiting client approval.`, "ok");
+        laLog("— deliverable preview —\n" + j.deliverable, "t");
+      } catch(e) { laLog("submit failed: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
+      laClientUiUpdate();
+    }
+    agentBalances();
+  } catch(e) { laLog("tick error: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
+  laBusy = false;
+}
+
+function laStart() {
+  agentInit();
+  if (laTimer) return;
+  laSetState(true);
+  laLog("▶ Agent started. Polling the chain every 12s.", "ok");
+  laTimer = setInterval(agentTick, 12000);
+  agentTick();
+}
+function laStop() {
+  clearInterval(laTimer); laTimer = null;
+  laSetState(false);
+  laLog("■ Agent stopped.");
+}
+
+async function laFundGas() {
+  agentInit();
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const amt = $("laGasAmt").value || "1";
+  try {
+    setStatus("laWalletStatus", `Confirm sending ${amt} USDC gas to the agent…`);
+    const tx = await signer.sendTransaction({ to: agentWallet.address, value: parseEther(amt) });
+    const rc = await tx.wait();
+    setStatus("laWalletStatus", `✓ Agent funded with ${amt} USDC gas`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    agentBalances();
+  } catch(e) { setStatus("laWalletStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true); }
+}
+
+async function laSweep() {
+  agentInit();
+  if (!user) { await connect(); if (!user) return; }
+  try {
+    setStatus("laWalletStatus","Sweeping agent funds to your wallet…");
+    const usdcC = new Contract(USDC_ARC, ERC20_ABI, agentWallet);
+    const bal = await usdcC.balanceOf(agentWallet.address);
+    let did = false;
+    if (bal > 0n) { const tx = await usdcC.transfer(user, bal); await tx.wait(); did = true; laLog(`💸 Swept ${formatUnits(bal,6)} earned USDC to owner.`, "ok"); }
+    const gas = await agentRpc.getBalance(agentWallet.address);
+    const keep = parseEther("0.2");
+    if (gas > keep) { const tx = await agentWallet.sendTransaction({ to: user, value: gas - keep }); await tx.wait(); did = true; laLog("💸 Swept excess gas to owner (kept 0.2 for future work).", "ok"); }
+    setStatus("laWalletStatus", did ? "✓ Sweep complete" : "Nothing to sweep.");
+    agentBalances(); loadBalances();
+  } catch(e) { setStatus("laWalletStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,90),true); }
+}
+
+function laReset() {
+  if (!confirm("Generate a NEW agent key? The old agent wallet stays on-chain but this browser forgets its key. Sweep earnings first!")) return;
+  localStorage.removeItem(LA_KEY_STORE);
+  agentWallet = null; liveJobs = {}; laLastBlock = 0;
+  laStop(); agentInit(); agentBalances();
+}
+
+// ── client side of the deal ──
+function laClientUiUpdate() {
+  if (!laClientJob) return;
+  const j = liveJobs[laClientJob];
+  $("laDealBox").style.display = "block";
+  $("laDealId").textContent = "#" + laClientJob;
+  if (!j) { $("laDealPhase").textContent = "posted — waiting for agent to notice"; return; }
+  $("laDealPhase").textContent = j.phase;
+  if (j.phase === "priced") {
+    $("laDealPrice").textContent = j.price + " USDC";
+    $("laFundJobBtn").disabled = false;
+  }
+  if (j.phase === "submitted") {
+    $("laFundJobBtn").disabled = true;
+    $("laReleaseBtn").disabled = false;
+  }
+  if (j.phase === "completed") {
+    $("laReleaseBtn").disabled = true;
+  }
+}
+
+async function laHire() {
+  agentInit();
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  const tmpl = $("laTemplate").value;
+  const desc = tmpl === "custom" ? ($("laCustomDesc").value.trim() || "Custom task") : tmpl;
+  $("laHireBtn").disabled = true;
+  try {
+    setStatus("laHireStatus","Confirm 'create job' in MetaMask…");
+    const c = new Contract(JOB_ADDR, JOB_ABI, signer);
+    const tx = await c.createJob(agentWallet.address, user, Math.floor(Date.now()/1000)+86400, desc, "0x0000000000000000000000000000000000000000");
+    const rc = await tx.wait();
+    const iface = new Interface(JOB_ABI);
+    let id = null;
+    for (const log of rc.logs) { try { const p = iface.parseLog(log); if (p?.name === "JobCreated") id = p.args.jobId.toString(); } catch{} }
+    if (!id) throw new Error("Job ID not found");
+    laClientJob = id;
+    setStatus("laHireStatus", `✓ Job #${id} posted to your agent. Watch the terminal.`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    laClientUiUpdate();
+    if (!laTimer) laLog("⚠️ Agent is not running — press 'Start agent' so it can react.", "wn");
+  } catch(e) { setStatus("laHireStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,100),true); }
+  finally { $("laHireBtn").disabled = false; }
+}
+
+async function laFundJob() {
+  const j = liveJobs[laClientJob];
+  if (!j || j.phase !== "priced") return;
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  $("laFundJobBtn").disabled = true;
+  try {
+    const amount = parseUnits(String(j.price), 6);
+    setStatus("laDealStatus","Confirm USDC approve…");
+    const usdcC = new Contract(USDC_ARC, ERC20_ABI, signer);
+    const txA = await usdcC.approve(JOB_ADDR, amount);
+    await txA.wait();
+    setStatus("laDealStatus","Confirm escrow (fund)…");
+    const c = new Contract(JOB_ADDR, JOB_ABI, signer);
+    const tx = await c.fund(laClientJob, "0x");
+    const rc = await tx.wait();
+    setStatus("laDealStatus","✓ Escrowed. The agent will now detect funding and deliver on its own.", false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    loadBalances();
+  } catch(e) { setStatus("laDealStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,100),true); $("laFundJobBtn").disabled = false; }
+}
+
+async function laRelease() {
+  if (!laClientJob) return;
+  if (!signer) { await connect(); if (!signer) return; }
+  await ensureArc(); provider=new BrowserProvider(window.ethereum); signer=await provider.getSigner();
+  $("laReleaseBtn").disabled = true;
+  try {
+    setStatus("laDealStatus","Confirm payment release…");
+    const c = new Contract(JOB_ADDR, JOB_ABI, signer);
+    const tx = await c.complete(laClientJob, keccak256(toUtf8Bytes("deliverable-approved")), "0x");
+    const rc = await tx.wait();
+    if (liveJobs[laClientJob]) liveJobs[laClientJob].phase = "completed";
+    setStatus("laDealStatus","✓ Payment released — your agent just earned USDC autonomously.", false, `${ARC_EXPLORER}/tx/${rc.hash}`);
+    laLog(`🏁 Job #${laClientJob} completed — payment received. Total flow was fully on-chain.`, "ok");
+    laClientUiUpdate(); agentBalances(); loadBalances();
+  } catch(e) { setStatus("laDealStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,100),true); $("laReleaseBtn").disabled = false; }
+}
+
 // ── EVENT BINDINGS ────────────────────────────────────────────
 $("connPill").addEventListener("click", connect);
 $("regBtn").addEventListener("click", registerAgent);
@@ -1066,11 +1398,23 @@ $("jTemplate").addEventListener("change", () => {
 });
 $("trRunBtn").addEventListener("click", trRun);
 $("trRefreshBtn").addEventListener("click", trRefresh);
-$("trDepUsdc").addEventListener("click", () => trDeposit(USDC_ARC,"USDC"));
-$("trDepEurc").addEventListener("click", () => trDeposit(EURC_ARC,"EURC"));
+$("trDepUsdc").addEventListener("click", () => trDeposit(USDC_ARC,"USDC","trDepAmtUsdc"));
+$("trDepEurc").addEventListener("click", () => trDeposit(EURC_ARC,"EURC","trDepAmtEurc"));
 $("trWdUsdc").addEventListener("click", () => trWithdraw(USDC_ARC,"USDC"));
 $("trWdEurc").addEventListener("click", () => trWithdraw(EURC_ARC,"EURC"));
 $("trParamsBtn").addEventListener("click", trSaveParams);
+$("laStartBtn").addEventListener("click", laStart);
+$("laStopBtn").addEventListener("click", laStop);
+$("laFundGasBtn").addEventListener("click", laFundGas);
+$("laSweepBtn").addEventListener("click", laSweep);
+$("laResetBtn").addEventListener("click", laReset);
+$("laHireBtn").addEventListener("click", laHire);
+$("laFundJobBtn").addEventListener("click", laFundJob);
+$("laReleaseBtn").addEventListener("click", laRelease);
+$("laTemplate").addEventListener("change", () => {
+  $("laCustomDesc").style.display = $("laTemplate").value==="custom" ? "block" : "none";
+});
+setInterval(() => { if (laClientJob) laClientUiUpdate(); }, 4000);
 
 fetchRate();
 pythFetch();
