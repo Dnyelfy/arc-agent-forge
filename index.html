@@ -1149,7 +1149,7 @@ function laLog(msg, cls="t") {
 
 function agentInit() {
   if (agentWallet) { $("laAddr").textContent = agentWallet.address; return; }
-  agentRpc = new JsonRpcProvider(ARC_RPC);
+  agentRpc = new JsonRpcProvider(ARC_RPC, undefined, { batchMaxCount: 1 });
   let key = localStorage.getItem(LA_KEY_STORE);
   if (!key) {
     const w = Wallet.createRandom();
@@ -1261,7 +1261,9 @@ async function agentTick() {
   if (!agentWallet || laBusy) return;
   laBusy = true;
   try {
-    const latest = await agentRpc.getBlockNumber();
+    let latest;
+    try { latest = await agentRpc.getBlockNumber(); }
+    catch(e) { laLog("RPC unreachable this tick, retrying…", "er"); laBusy = false; return; }
     const MAX_SPAN = 450; // Arc RPC rejects wide eth_getLogs ranges
     if (!laLastBlock) laLastBlock = Math.max(0, latest - MAX_SPAN);
     const iface = new Interface(JOB_ABI);
