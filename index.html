@@ -384,7 +384,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
 <div class="tabpane" id="tab-live">
   <section class="card">
     <h2><span class="badge">AUTONOMOUS</span> Live Agent Worker</h2>
-    <p class="note">A real on-chain worker with its <b>own wallet</b>. It watches the ERC-8183 Jobs contract; when a job is assigned to it, the agent <b>prices it, waits for escrow, produces the deliverable and submits — with zero human clicks</b>. As the provider itself, it calls <code>setBudget</code> natively (yes, that fixes the old single-wallet bug). Burner key lives only in this browser — testnet use only.</p>
+    <p class="note">A real on-chain worker with its <b>own wallet</b>. It watches the ERC-8183 Jobs contract; when a job is assigned to it, the agent <b>prices it, waits for escrow, produces the deliverable and submits — with zero human clicks</b>. As the provider itself, it calls <code>setBudget</code> natively (yes, that fixes the old single-wallet bug). It also works as the <b>ArcSub billing keeper</b>: when any ArcPay subscription comes due, the agent collects it on its own — subscribers pay while everyone sleeps. Burner key lives only in this browser — testnet use only.</p>
     <div class="balances">
       <div class="bal-chip"><div class="sym">Agent address</div><div class="amt" id="laAddr" style="font-size:12.5px;word-break:break-all;">—</div></div>
       <div class="bal-chip"><div class="sym">Gas (native USDC)</div><div class="amt" id="laGas">—</div></div>
@@ -393,7 +393,18 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <div class="row">
       <div><label>Fund gas amount</label><input id="laGasAmt" placeholder="1.00" inputmode="decimal"/></div>
     </div>
+    <div class="row" style="margin-top:4px;">
+      <div>
+        <label>On-chain identity (ERC-8004)</label>
+        <div class="agent" style="margin-bottom:0;">
+          <div class="aid" id="laIdBadge">?</div>
+          <div class="meta"><b id="laIdName">No identity yet</b><span id="laIdSub">The worker exists, but it's unregistered — forge its ID below.</span></div>
+          <a id="laIdLink" href="#" target="_blank" rel="noreferrer" style="display:none;">ArcScan ↗</a>
+        </div>
+      </div>
+    </div>
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="laForgeIdBtn">⚒️ Forge agent's identity</button>
       <button class="ghost" id="laFundGasBtn">⛽ Fund agent gas</button>
       <button class="ghost" id="laSweepBtn">💸 Sweep earnings to my wallet</button>
       <button class="ghost" id="laResetBtn">🗑 New agent key</button>
@@ -467,6 +478,14 @@ const TREASURY_ADDR = "0xC99f4c415C7d9e2bafDC04C43500131fDb43eA53";
 const PYTH_ADDR     = "0x2880aB155794e7179c9eE2e38200202908C17B43";
 const EUR_USD_FEED  = "0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b";
 const HERMES        = "https://hermes.pyth.network";
+
+/* ── ARCSUB (subscription keeper duty for the live agent) ── */
+const ARCSUB_ADDR = "0x015f65293c936741588dC03ebDD1A193D62535eC";
+const ARCSUB_ABI = [
+  "function nextId() view returns (uint256)",
+  "function charge(uint256 id)",
+  "function getSub(uint256 id) view returns (address subscriber, address merchant, uint96 amount, uint32 interval, uint40 nextChargeAt, bool active, string label)"
+];
 
 const ID_ABI = ["function register(string metadataURI)","event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)"];
 const REP_ABI = ["function giveFeedback(uint256 agentId,int128 score,uint8 feedbackType,string tag,string metadataURI,string evidenceURI,string comment,bytes32 feedbackHash)"];
@@ -1140,6 +1159,7 @@ function agentInit() {
   }
   agentWallet = new Wallet(key, agentRpc);
   $("laAddr").textContent = agentWallet.address;
+  laIdRefresh();
 }
 
 async function agentBalances() {
@@ -1178,6 +1198,59 @@ function agentGenerate(desc) {
   return "AGENT DELIVERABLE\nJob: " + desc + "\nAgent: " + agentWallet.address + "\nTime: " + new Date().toISOString() + "\n---\n" + body;
 }
 
+const LA_ID_STORE = "forgeAgentTokenId_v1";
+
+async function laIdRefresh() {
+  const saved = localStorage.getItem(LA_ID_STORE);
+  if (!saved || !agentWallet) return;
+  try {
+    const c = new Contract(IDENTITY, ["function ownerOf(uint256) view returns (address)", "function tokenURI(uint256) view returns (string)"], agentRpc);
+    const owner = await c.ownerOf(saved);
+    if (owner.toLowerCase() !== agentWallet.address.toLowerCase()) return;
+    let name = "Live Worker Agent";
+    try { const m = decodeJson(await c.tokenURI(saved)); if (m?.name) name = m.name; } catch {}
+    $("laIdBadge").textContent = "#" + (saved.length > 5 ? saved.slice(0,4) + "…" : saved);
+    $("laIdName").textContent = name;
+    $("laIdSub").textContent = "ERC-8004 · identity #" + saved + " · owned by the agent itself";
+    $("laIdLink").href = `${ARC_EXPLORER}/token/${IDENTITY}/instance/${saved}`;
+    $("laIdLink").style.display = "";
+    $("laForgeIdBtn").style.display = "none";
+  } catch {}
+}
+
+async function laForgeId() {
+  agentInit();
+  try {
+    const gas = await agentRpc.getBalance(agentWallet.address);
+    if (gas === 0n) { setStatus("laWalletStatus","Fund the agent's gas first — it pays for its own identity.",true); return; }
+    $("laForgeIdBtn").disabled = true;
+    laLog("⚒️ Forging my own ERC-8004 identity — I'm registering myself, no human signature involved.");
+    const meta = {
+      name: "Live Worker Agent",
+      description: "Autonomous on-chain worker: prices jobs, delivers, collects payment and subscription billing on Arc Testnet.",
+      agent_type: "assistant",
+      capabilities: ["job_pricing","deliverable_generation","escrow_settlement","subscription_billing"],
+      version: "1.0.0", forge: "arc-agent-forge", created: new Date().toISOString().slice(0,10)
+    };
+    const uri = "data:application/json;base64," + btoa(unescape(encodeURIComponent(JSON.stringify(meta))));
+    const c = new Contract(IDENTITY, ID_ABI, agentWallet);
+    const tx = await c.register(uri);
+    const rc = await tx.wait();
+    const ifc = new Interface(ID_ABI);
+    let id = null;
+    for (const log of rc.logs) { try { const p = ifc.parseLog(log); if (p?.name === "Transfer") id = p.args.tokenId.toString(); } catch {} }
+    if (id) {
+      localStorage.setItem(LA_ID_STORE, id);
+      laLog(`✓ Identity forged: agent #${id}. Same address now holds the ID, takes the jobs and earns the money.`, "ok");
+      laIdRefresh();
+    } else {
+      laLog("Identity minted but ID could not be read — check ArcScan.", "wn");
+    }
+  } catch(e) {
+    laLog("Identity forge failed: " + (e.shortMessage||e.message||"").slice(0,90), "er");
+  } finally { $("laForgeIdBtn").disabled = false; }
+}
+
 function laSetState(on) {
   const dot = $("laDot");
   dot.className = "sdot" + (on ? " calm" : "");
@@ -1189,16 +1262,30 @@ async function agentTick() {
   laBusy = true;
   try {
     const latest = await agentRpc.getBlockNumber();
-    if (!laLastBlock) laLastBlock = Math.max(0, latest - 3000);
+    const MAX_SPAN = 450; // Arc RPC rejects wide eth_getLogs ranges
+    if (!laLastBlock) laLastBlock = Math.max(0, latest - MAX_SPAN);
     const iface = new Interface(JOB_ABI);
-    if (latest >= laLastBlock) {
-      const logs = await agentRpc.getLogs({
-        address: JOB_ADDR,
-        fromBlock: laLastBlock,
-        toBlock: latest,
-        topics: [iface.getEvent("JobCreated").topicHash, null, null, zeroPadValue(agentWallet.address, 32)]
-      });
-      laLastBlock = latest + 1;
+    let scanFrom = laLastBlock;
+    const collected = [];
+    while (scanFrom <= latest) {
+      const scanTo = Math.min(scanFrom + MAX_SPAN, latest);
+      try {
+        const chunk = await agentRpc.getLogs({
+          address: JOB_ADDR,
+          fromBlock: scanFrom,
+          toBlock: scanTo,
+          topics: [iface.getEvent("JobCreated").topicHash, null, null, zeroPadValue(agentWallet.address, 32)]
+        });
+        collected.push(...chunk);
+        scanFrom = scanTo + 1;
+        laLastBlock = scanFrom;
+      } catch(e) {
+        laLog(`log scan ${scanFrom}-${scanTo} failed, will retry next tick`, "er");
+        break;
+      }
+    }
+    {
+      const logs = collected;
       for (const log of logs) {
         let p; try { p = iface.parseLog(log); } catch { continue; }
         const id = p.args.jobId.toString();
@@ -1239,6 +1326,22 @@ async function agentTick() {
       } catch(e) { laLog("submit failed: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
       laClientUiUpdate();
     }
+    // ── ArcSub keeper duty: collect due subscriptions, no human involved ──
+    try {
+      const sub = new Contract(ARCSUB_ADDR, ARCSUB_ABI, agentWallet);
+      const maxId = Number(await sub.nextId());
+      const now = Math.floor(Date.now() / 1000);
+      for (let id = 1; id < Math.min(maxId, 200); id++) {
+        let s; try { s = await sub.getSub(id); } catch { continue; }
+        if (!s.active || now < Number(s.nextChargeAt)) continue;
+        laLog(`🔁 Subscription #${id} ("${s.label}") is due — collecting ${formatUnits(s.amount,6)} USDC for ${s.merchant.slice(0,8)}…`);
+        try {
+          const tx = await sub.charge(id);
+          await tx.wait();
+          laLog(`✓ Subscription #${id} charged autonomously. Merchant paid, next cycle scheduled.`, "ok");
+        } catch(e) { laLog(`Subscription #${id} charge failed: ` + (e.shortMessage||e.message||"").slice(0,70), "er"); }
+      }
+    } catch {}
     agentBalances();
   } catch(e) { laLog("tick error: " + (e.shortMessage||e.message||"").slice(0,90), "er"); }
   laBusy = false;
@@ -1292,6 +1395,7 @@ async function laSweep() {
 function laReset() {
   if (!confirm("Generate a NEW agent key? The old agent wallet stays on-chain but this browser forgets its key. Sweep earnings first!")) return;
   localStorage.removeItem(LA_KEY_STORE);
+  localStorage.removeItem(LA_ID_STORE);
   agentWallet = null; liveJobs = {}; laLastBlock = 0;
   laStop(); agentInit(); agentBalances();
 }
@@ -1334,6 +1438,7 @@ async function laHire() {
     for (const log of rc.logs) { try { const p = iface.parseLog(log); if (p?.name === "JobCreated") id = p.args.jobId.toString(); } catch{} }
     if (!id) throw new Error("Job ID not found");
     laClientJob = id;
+    if (rc.blockNumber) laLastBlock = laLastBlock ? Math.min(laLastBlock, rc.blockNumber) : rc.blockNumber;
     setStatus("laHireStatus", `✓ Job #${id} posted to your agent. Watch the terminal.`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
     laClientUiUpdate();
     if (!laTimer) laLog("⚠️ Agent is not running — press 'Start agent' so it can react.", "wn");
@@ -1403,6 +1508,7 @@ $("trDepEurc").addEventListener("click", () => trDeposit(EURC_ARC,"EURC","trDepA
 $("trWdUsdc").addEventListener("click", () => trWithdraw(USDC_ARC,"USDC"));
 $("trWdEurc").addEventListener("click", () => trWithdraw(EURC_ARC,"EURC"));
 $("trParamsBtn").addEventListener("click", trSaveParams);
+$("laForgeIdBtn").addEventListener("click", laForgeId);
 $("laStartBtn").addEventListener("click", laStart);
 $("laStopBtn").addEventListener("click", laStop);
 $("laFundGasBtn").addEventListener("click", laFundGas);
