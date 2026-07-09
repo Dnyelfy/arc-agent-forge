@@ -1351,8 +1351,8 @@ function laStart() {
   agentInit();
   if (laTimer) return;
   laSetState(true);
-  laLog("▶ Agent started. Polling the chain every 12s.", "ok");
-  laTimer = setInterval(agentTick, 12000);
+  laLog("▶ Agent started. Polling the chain every 5s.", "ok");
+  laTimer = setInterval(agentTick, 5000);
   agentTick();
 }
 function laStop() {
@@ -1442,6 +1442,7 @@ async function laHire() {
     setStatus("laHireStatus", `✓ Job #${id} posted to your agent. Watch the terminal.`, false, `${ARC_EXPLORER}/tx/${rc.hash}`);
     laClientUiUpdate();
     if (!laTimer) laLog("⚠️ Agent is not running — press 'Start agent' so it can react.", "wn");
+    else { agentTick(); setTimeout(agentTick, 2500); setTimeout(agentTick, 6000); }
   } catch(e) { setStatus("laHireStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,100),true); }
   finally { $("laHireBtn").disabled = false; }
 }
@@ -1464,6 +1465,7 @@ async function laFundJob() {
     const rc = await tx.wait();
     setStatus("laDealStatus","✓ Escrowed. The agent will now detect funding and deliver on its own.", false, `${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
+    if (laTimer) { agentTick(); setTimeout(agentTick, 2500); setTimeout(agentTick, 6000); }
   } catch(e) { setStatus("laDealStatus","Failed: "+(e.shortMessage||e.message||e).toString().slice(0,100),true); $("laFundJobBtn").disabled = false; }
 }
 
