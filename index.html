@@ -456,8 +456,57 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
 </footer>
 </div>
 
-<script type="module">
-import { BrowserProvider, Contract, Interface, keccak256, toUtf8Bytes, parseUnits, formatUnits, zeroPadValue, MaxUint256, Wallet, JsonRpcProvider, parseEther, formatEther } from "https://esm.sh/ethers@6.13.4";
+<script>
+/* ethers dinamik ES-module import'u ile geliyordu. O import başarısız olduğunda
+   modül bloğu hiç çalışmıyor ve sayfa hatasız biçimde ölü kalıyordu. Artık
+   klasik script etiketiyle, birden fazla kaynaktan sırayla deneyerek yükleniyor. */
+window.__ethersReady = (function () {
+  var sources = [
+    "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js",
+    "https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js",
+    "https://unpkg.com/ethers@6.13.4/dist/ethers.umd.min.js",
+    "vendor/ethers.umd.min.js"
+  ];
+  return new Promise(function (resolve, reject) {
+    (function next(i) {
+      if (i >= sources.length) { reject(new Error("ethers hicbir kaynaktan yuklenemedi")); return; }
+      var el = document.createElement("script");
+      el.src = sources[i];
+      el.onload = function () { window.ethers ? resolve(window.ethers) : next(i + 1); };
+      el.onerror = function () { next(i + 1); };
+      document.head.appendChild(el);
+    })(0);
+  });
+})();
+</script>
+<script>
+/* Sessiz ölüm yerine görünür hata: yükleme de, çalışma anındaki beklenmedik
+   hatalar da ekranda bir şerit olarak çıkar. */
+function __afBanner(text) {
+  var b = document.getElementById("loadErrorBar");
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "loadErrorBar";
+    b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;padding:10px 14px;"
+      + "background:#7f1d1d;color:#fff;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;"
+      + "text-align:center";
+    document.body.appendChild(b);
+  }
+  b.textContent = text;
+}
+window.addEventListener("error", function (e) {
+  __afBanner("Hata: " + (e.message || e.error) + "  —  ayrıntı için F12 → Console");
+});
+window.addEventListener("unhandledrejection", function (e) {
+  __afBanner("Hata: " + ((e.reason && e.reason.message) || e.reason));
+});
+
+window.__ethersReady.then(function (E) {
+  var BrowserProvider = E.BrowserProvider, Contract = E.Contract, Interface = E.Interface,
+      keccak256 = E.keccak256, toUtf8Bytes = E.toUtf8Bytes, parseUnits = E.parseUnits,
+      formatUnits = E.formatUnits, zeroPadValue = E.zeroPadValue, MaxUint256 = E.MaxUint256,
+      Wallet = E.Wallet, JsonRpcProvider = E.JsonRpcProvider, parseEther = E.parseEther,
+      formatEther = E.formatEther;
 
 const ARC_CHAIN_ID = "0x4cef52";
 const SEP_CHAIN_ID = "0xaa36a7";
@@ -1534,6 +1583,11 @@ if (window.ethereum) {
   window.ethereum.on?.("accountsChanged", ()=>location.reload());
   window.ethereum.on?.("chainChanged", ()=>location.reload());
 }
+
+}, function (err) {
+  __afBanner("ethers kütüphanesi yüklenemedi (" + err.message + "). Ağ engelleyicisi veya CDN sorunu olabilir.");
+});
 </script>
+
 </body>
 </html>
