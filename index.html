@@ -737,14 +737,17 @@ async function loadAgents() {
     // holdings directly and has no such window.
     if (!tokenIds.length) {
       try {
+        // /tokens returns one row per collection with a balance; the individual
+        // token ids live under /nft. Asking the first endpoint for ids returns
+        // nothing, which is why a freshly minted agent did not appear.
         const res = await timedFetch(
-          `${ARC_API}/addresses/${user}/tokens?type=ERC-721`, 10000, "token lookup");
+          `${ARC_API}/addresses/${user}/nft?type=ERC-721`, 10000, "token lookup");
         if (res.ok) {
           const data = await res.json();
           for (const item of (data.items || [])) {
-            const holder = item.token && item.token.address;
-            if (!holder || holder.toLowerCase() !== IDENTITY.toLowerCase()) continue;
-            const id = item.token_id || (item.token_instance && item.token_instance.id);
+            const holder = (item.token && item.token.address) || item.token_address;
+            if (holder && holder.toLowerCase() !== IDENTITY.toLowerCase()) continue;
+            const id = item.id ?? item.token_id ?? (item.token_instance && item.token_instance.id);
             if (id != null) tokenIds.push(String(id));
           }
         }
@@ -793,7 +796,9 @@ async function loadAgents() {
       try {
         const owner = await contract.ownerOf(tokenId);
         if (owner.toLowerCase() !== user.toLowerCase()) continue;
-        let meta = {name: "Dönay's Arc Research Agent", agent_type: "research"};
+        // Falling back to a specific person's agent name meant every wallet whose
+        // metadata failed to decode saw someone else's agent in their own list.
+        let meta = {name: "Agent #" + tokenId, agent_type: "unknown"};
         try { const uri = await contract.tokenURI(tokenId); const parsed = decodeJson(uri); if (parsed) meta = parsed; } catch {}
         items.push({tokenId, meta});
       } catch {}
