@@ -600,6 +600,32 @@ async function timedFetch(url, ms = 10000, what = "request") {
   }
 }
 
+// ethers wraps a node's reply in its own error and reports "could not coalesce
+// error", which tells the user nothing. The node's actual sentence — a rate
+// limit, an insufficient balance, a revert reason — sits nested inside. This
+// digs it out so the page shows the reason instead of the wrapper.
+function errText(e, limit = 110) {
+  const seen = new Set();
+  let node = e, best = "";
+  for (let depth = 0; node && depth < 6; depth++) {
+    if (seen.has(node)) break;
+    seen.add(node);
+    const msg = node.shortMessage || node.reason || node.message || "";
+    // Prefer any message that is not one of ethers' own generic wrappers.
+    if (msg && !/could not coalesce|missing revert data|unknown error/i.test(msg)) { best = msg; break; }
+    if (msg && !best) best = msg;
+    node = node.error || node.info?.error || node.data?.originalError || node.cause;
+  }
+  best = String(best || e || "").replace(/\s+/g, " ").trim();
+  if (/rate limit/i.test(best)) {
+    return "The Arc RPC is rate limiting this wallet. Wait a few minutes and try again.";
+  }
+  if (/insufficient funds/i.test(best)) {
+    return "Not enough USDC for gas. Top up from the Circle faucet.";
+  }
+  return best.slice(0, limit);
+}
+
 // ── CHAIN ─────────────────────────────────────────────────────
 async function ensureChain(chainId, name, rpc, explorer, sym) {
   try { await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId}]}); }
@@ -695,7 +721,7 @@ async function registerAgent() {
     setStatus("regStatus",`✓ Agent forged! ID: ${id??"—"}`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     $("rId").value=id??"";
     loadAgents();
-  } catch(e) { setStatus("regStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,90),true); }
+  } catch(e) { setStatus("regStatus","Failed: "+errText(e, 90),true); }
   finally { $("regBtn").disabled=false; }
 }
 
@@ -808,7 +834,7 @@ async function loadAgents() {
     $("agentList").innerHTML = items.map(({tokenId, meta}) =>
       `<div class="agent"><div class="aid">#${tokenId}</div><div class="meta"><b>${String(meta.name||"Unnamed").slice(0,48)}</b><span>${meta.agent_type||"—"} · ERC-8004</span></div><a href="${ARC_EXPLORER}/token/${IDENTITY}/instance/${tokenId}" target="_blank" rel="noreferrer">ArcScan ↗</a></div>`
     ).join("");
-  } catch(e) { $("agentList").innerHTML='<p class="empty">Error: '+(e.message||"")+'</p>'; }
+  } catch(e) { $("agentList").innerHTML='<p class="empty">Error: '+errText(e)+'</p>'; }
 }
 
 // ── REPUTATION ────────────────────────────────────────────────
@@ -827,7 +853,7 @@ async function giveRep() {
     const rc=await tx.wait();
     setStatus("repStatus",`✓ Feedback recorded: agent #${id} scored ${score}`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
   } catch(e) {
-    setStatus("repStatus","Failed: "+((e.shortMessage||e.message||"").includes("owner")?"owners can't rate own agent — switch account. ":"")+(e.shortMessage||e.message||e).slice(0,80),true);
+    setStatus("repStatus","Failed: "+((e.shortMessage||e.message||"").includes("owner")?"owners can't rate own agent — switch account. ":"")+errText(e, 80),true);
   } finally { $("repBtn").disabled=false; }
 }
 
@@ -861,7 +887,7 @@ async function sendTransfer() {
     row.innerHTML=`<b>${amt} ${sym}</b> → ${to.slice(0,8)}… · <span style="color:var(--mut)">${memoId}</span> · <a href="${ARC_EXPLORER}/tx/${rc.hash}" target="_blank" style="color:var(--acc)">tx ↗</a>`;
     if (hist.querySelector(".empty")) hist.innerHTML="";
     hist.prepend(row);
-  } catch(e) { setStatus("transferStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
+  } catch(e) { setStatus("transferStatus","Failed: "+errText(e, 100),true); }
   finally { $("transferBtn").disabled=false; }
 }
 
@@ -949,7 +975,7 @@ async function runJobFlow() {
     $("settleCard").scrollIntoView({behavior:"smooth"});
     loadBalances();
   } catch(e) {
-    setStatus("jobFlowStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,110),true);
+    setStatus("jobFlowStatus","Failed: "+errText(e, 110),true);
   } finally { $("runJobBtn").disabled=false; }
 }
 
@@ -967,7 +993,7 @@ async function approveJob() {
     const rc=await tx.wait();
     setStatus("settleJobStatus",`✓ Done! Payment released to provider for job #${activeJobId}.`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
-  } catch(e) { setStatus("settleJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
+  } catch(e) { setStatus("settleJobStatus","Failed: "+errText(e, 100),true); }
   finally { $("approveJobBtn").disabled=false; }
 }
 
@@ -985,7 +1011,7 @@ async function rejectJob() {
     const rc=await tx.wait();
     setStatus("settleJobStatus",`✓ Job #${activeJobId} rejected — funds refunded to you.`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
-  } catch(e) { setStatus("settleJobStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
+  } catch(e) { setStatus("settleJobStatus","Failed: "+errText(e, 100),true); }
   finally { $("rejectJobBtn").disabled=false; }
 }
 
@@ -1007,7 +1033,7 @@ async function doSwap() {
     const rc=await tx.wait();
     setStatus("swapStatus",`✓ Swap: ${amt} ${inSym} → ~${outAmt} ${outSym}`,false,`${ARC_EXPLORER}/tx/${rc.hash}`);
     loadBalances();
-  } catch(e) { setStatus("swapStatus","Failed: "+(e.shortMessage||e.message||e).slice(0,100),true); }
+  } catch(e) { setStatus("swapStatus","Failed: "+errText(e, 100),true); }
   finally { $("swapBtn").disabled=false; }
 }
 
@@ -1058,7 +1084,7 @@ async function trRefresh() {
       maxConfBps: Number(s[4]), bonusBps: Number(s[5]), paused: s[6]
     };
     trRender();
-  } catch(e) { trLog("getStatus error: " + (e.shortMessage||e.message), "er"); }
+  } catch(e) { trLog("getStatus error: " + errText(e), "er"); }
 }
 
 function trRender() {
