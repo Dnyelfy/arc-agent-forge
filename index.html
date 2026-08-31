@@ -246,8 +246,8 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <h2><span class="badge">ERC-8183</span> Hire an agent</h2>
     <p class="note">Post a job, escrow USDC, and release payment — the full Agentic Commerce flow in one click. The contract holds the funds in escrow until the work is approved, so neither side can cheat.</p>
 
-    <label>Agent / provider address <span style="font-weight:400;color:var(--mut);">(who gets paid)</span></label>
-    <input id="jProvider" placeholder="0x… agent wallet"/>
+    <label>Agent / provider address <span style="font-weight:400;color:var(--mut);">(who gets paid — sets the price, so use your own address unless the provider is here too)</span></label>
+    <input id="jProvider" placeholder="0x… agent wallet — use your own address to run the whole flow"/>
 
     <label>What's the job?</label>
     <select id="jTemplate">
@@ -919,6 +919,19 @@ async function runJobFlow() {
   if (!prov.startsWith("0x")) { setStatus("jobFlowStatus","Enter the provider (agent) address.",true); return; }
   if (!amt||isNaN(parseFloat(amt))) { setStatus("jobFlowStatus","Enter a payment amount.",true); return; }
 
+  // On this deployment the price is set by the provider, not the client — Arc's
+  // own ERC-8183 walkthrough calls setBudget from the provider wallet. Running
+  // the whole flow from one account therefore needs the provider to be that
+  // account; otherwise step 2 reverts with a custom error that decodes to
+  // nothing useful, which is exactly how it failed before this check existed.
+  if (prov.toLowerCase() !== user.toLowerCase()) {
+    setStatus("jobFlowStatus",
+      "The provider wallet sets the price on this contract, so a job for someone else " +
+      "cannot be completed from this account alone. Use your own address as the provider " +
+      "to run the full flow, or have the provider open this page and set the budget.", true);
+    return;
+  }
+
   $("runJobBtn").disabled=true;
   $("jobProgress").style.display="block";
   const steps=$("jobSteps"); steps.innerHTML="";
@@ -942,8 +955,16 @@ async function runJobFlow() {
     // 2. setBudget
     const r2=jobStepRow(steps,"Setting price…");
     setStatus("jobFlowStatus","Step 2/5 — Confirm 'set budget' in MetaMask…");
-    const tx2=await c.setBudget(jobId, amount, "0x");
-    const rc2=await tx2.wait();
+    let rc2;
+    try {
+      const tx2=await c.setBudget(jobId, amount, "0x");
+      rc2=await tx2.wait();
+    } catch (e2) {
+      // The job exists at this point, so say so: the id is not lost and the
+      // budget can still be set from the provider account.
+      throw new Error("Job #" + jobId + " was created, but setting the price was rejected. " +
+                      "On this contract only the provider may set the budget. (" + errText(e2, 60) + ")");
+    }
     jobStepDone(r2, `Price set: ${amt} USDC`, `${ARC_EXPLORER}/tx/${rc2.hash}`);
 
     // 3. approve USDC
@@ -1067,7 +1088,14 @@ async function pythFetch() {
     else if (confBps <= 50) { dot.classList.add("elev"); $("pyStress").textContent = "ELEVATED — agent cautious"; }
     else                    { dot.classList.add("high"); $("pyStress").textContent = "STRESSED — agent defers rebalancing"; }
     trRender();
-  } catch(e) { $("pyStress").textContent = "Hermes error: " + e.message; }
+  } catch(e) {
+    // Keep the last good price on screen rather than blanking it, and say the
+    // feed is stale instead of printing a fetch error nobody can act on.
+    $("pyStress").textContent = pyLast
+      ? "Price feed unreachable — showing the last value received."
+      : "Price feed unreachable — no EUR/USD price yet.";
+    const dot = $("pyDot"); if (dot) dot.className = "sdot";
+  }
 }
 
 async function trRefresh() {
@@ -1134,6 +1162,18 @@ async function trRun() {
   try {
     await pythFetch();
     await trRefresh();
+    // Without a price there is nothing to decide, and reading .price off a null
+    // threw a TypeError that surfaced as "Cannot read properties of null" — an
+    // error about the code rather than about the missing feed.
+    if (!pyLast) {
+      trLog("No EUR/USD price available — the Pyth feed did not answer. Nothing decided.", "er");
+      setStatus("trStatus", "Price feed unavailable. Try again in a moment.", true);
+      return;
+    }
+    if (!trLast) {
+      trLog("Treasury state unavailable — could not read the contract.", "er");
+      return;
+    }
     const { usdcBal, eurcBal, targetBps, driftBps, maxConfBps, paused } = trLast;
     if (paused) { trLog("Agent is paused by owner.", "wn"); return; }
     const eurcVal = eurcBal * pyLast.price;
@@ -1263,6 +1303,9 @@ $("trAuto").addEventListener("change", e => {
 const LA_KEY_STORE = "forgeAgentKey_v1";
 let agentWallet = null, agentRpc = null;
 let laTimer = null, laBusy = false, laLastBlock = 0;
+// Per-subscription retry state: how many times a charge has failed, and the
+// moment it becomes worth trying again.
+const laFailures = new Map(), laSkipUntil = new Map();
 let liveJobs = {};        // jobId -> {phase, desc, price, deliverable}
 let laClientJob = null;   // jobId the client (MetaMask user) is tracking
 
@@ -1458,12 +1501,35 @@ async function agentTick() {
     for (let id = 1; id < Math.min(maxId, 200); id++) {
       let s; try { s = await sub.getSub(id); } catch { continue; }
       if (!s.active || now < Number(s.nextChargeAt)) continue;
+      // Honour the backoff set by an earlier failure, and say nothing while
+      // waiting: repeating the same failure in the log every five seconds
+      // buries the message that matters.
+      const waitUntil = laSkipUntil.get(id) || 0;
+      if (Date.now() < waitUntil) continue;
       laLog(`🔁 Subscription #${id} ("${s.label}") is due — collecting ${formatUnits(s.amount,6)} USDC for ${s.merchant.slice(0,8)}…`);
       try {
         const tx = await sub.charge(id);
         await tx.wait();
+        laFailures.delete(id); laSkipUntil.delete(id);
         laLog(`✓ Subscription #${id} charged autonomously. Merchant paid, next cycle scheduled.`, "ok");
-      } catch(e) { laLog(`Subscription #${id} charge failed: ` + (e.shortMessage||e.message||"").slice(0,70), "er"); }
+      } catch(e) {
+        const why = errText(e, 70);
+        /* Retrying a charge that failed for lack of gas produces nothing but
+           another failed send. At one tick every five seconds across every
+           subscription that is dozens of rejected transactions a minute, which
+           is how this wallet ended up rate limited by the node. Each failure
+           now waits longer than the last, and a gas failure stops the loop
+           outright because no amount of retrying creates a balance. */
+        const backoff = laFailures.get(id) || 0;
+        laFailures.set(id, backoff + 1);
+        laSkipUntil.set(id, Date.now() + Math.min(15 * 60000, 30000 * Math.pow(2, backoff)));
+        laLog(`Subscription #${id} charge failed: ` + why, "er");
+        if (/insufficient funds|not enough/i.test(why)) {
+          laLog("Agent wallet has no gas — stopping. Use 'Fund agent gas', then start again.", "er");
+          laStop();
+          return;
+        }
+      }
     }
   } catch {}
 
