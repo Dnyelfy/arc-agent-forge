@@ -188,7 +188,7 @@ code{background:#0d0905;border:1px solid var(--line);border-radius:6px;padding:1
     <label>Memo ID</label>
     <input id="tMemoId" placeholder="invoice-2026-0001"/>
     <label>Memo data</label>
-    <input id="tMemoData" placeholder="order=2026-0001 agent=659743"/>
+    <input id="tMemoData" placeholder="order=2026-0001 agent=&lt;your agent id&gt;"/>
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
       <button id="transferBtn">💸 Send with memo</button>
       <button class="ghost" id="refreshBalBtn">↻ Refresh balances</button>
@@ -585,11 +585,32 @@ document.querySelectorAll(".tab").forEach(btn => {
   });
 });
 
+// A request that never answers is not an error, so no catch can rescue it: the
+// panel waits on a promise that will not settle and the page looks frozen.
+async function timedFetch(url, ms = 10000, what = "request") {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { signal: ctl.signal });
+  } catch (e) {
+    if (e && e.name === "AbortError") throw new Error(what + " timed out after " + (ms / 1000) + "s");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── CHAIN ─────────────────────────────────────────────────────
 async function ensureChain(chainId, name, rpc, explorer, sym) {
   try { await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId}]}); }
   catch(e) {
-    if (e.code===4902) await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId,chainName:name,nativeCurrency:{name:sym,symbol:sym,decimals:6},rpcUrls:[rpc],blockExplorerUrls:[explorer]}]});
+    // Arc's gas token has 18 decimals — this file formats it with formatEther
+    // everywhere else. Declaring 6 here made the wallet show a balance a trillion
+    // times too large, and MetaMask rejects a native currency that is not 18
+    // decimals outright, so anyone without Arc already configured could not add
+    // it from this page at all. The 6-decimal figure belongs to the ERC-20 USDC
+    // contract, which is a different token from the gas.
+    if (e.code===4902) await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId,chainName:name,nativeCurrency:{name:sym,symbol:sym,decimals:18},rpcUrls:[rpc],blockExplorerUrls:[explorer]}]});
     else throw e;
   }
 }
@@ -628,7 +649,7 @@ async function loadBalances() {
 // ── RATE ──────────────────────────────────────────────────────
 async function fetchRate() {
   try {
-    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=euro-coin&vs_currencies=usd");
+    const r = await timedFetch("https://api.coingecko.com/api/v3/simple/price?ids=euro-coin&vs_currencies=usd", 8000, "price lookup");
     const d = await r.json();
     eurUsd = d["euro-coin"]?.usd || 1.08;
     $("liveRate").textContent = `1 EURC = $${eurUsd.toFixed(4)} USD`;
@@ -692,7 +713,8 @@ async function loadAgents() {
       "function ownerOf(uint256 tokenId) view returns (address)",
       "function tokenURI(uint256 tokenId) view returns (string)",
       "function balanceOf(address owner) view returns (uint256)",
-      "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)"
+      "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+      "function nextId() view returns (uint256)"
     ], p);
 
     let tokenIds = [];
@@ -706,15 +728,44 @@ async function loadAgents() {
       }
     } catch {}
 
-    // Fallback: scan a range of known IDs around #286241
+    // Fallback: ask the explorer which tokens this address actually holds.
+    //
+    // This used to be a hardcoded list of four token IDs, which only ever found
+    // agents for the one wallet those IDs belonged to. Everyone else fell through
+    // to a log scan that reaches about a day back on a chain with sub-second
+    // blocks, so an agent minted last week was invisible. The explorer indexes
+    // holdings directly and has no such window.
     if (!tokenIds.length) {
-      const candidates = [286241, 286240, 286242, 659743];
-      for (const id of candidates) {
-        try {
-          const owner = await contract.ownerOf(id);
-          if (owner.toLowerCase() === user.toLowerCase()) tokenIds.push(id.toString());
-        } catch {}
-      }
+      try {
+        const res = await timedFetch(
+          `${ARC_API}/addresses/${user}/tokens?type=ERC-721`, 10000, "token lookup");
+        if (res.ok) {
+          const data = await res.json();
+          for (const item of (data.items || [])) {
+            const holder = item.token && item.token.address;
+            if (!holder || holder.toLowerCase() !== IDENTITY.toLowerCase()) continue;
+            const id = item.token_id || (item.token_instance && item.token_instance.id);
+            if (id != null) tokenIds.push(String(id));
+          }
+        }
+      } catch {}
+    }
+
+    // Still nothing: the explorer may be behind or refusing reads, so ask the
+    // contract about the ids the registry has most recently issued.
+    if (!tokenIds.length) {
+      try {
+        const next = await contract.nextId?.();
+        if (next) {
+          const top = Number(next) - 1;
+          for (let id = top; id > Math.max(0, top - 40); id--) {
+            try {
+              const owner = await contract.ownerOf(id);
+              if (owner.toLowerCase() === user.toLowerCase()) tokenIds.push(String(id));
+            } catch {}
+          }
+        }
+      } catch {}
     }
 
     // Last fallback: Transfer events with limited range
@@ -733,11 +784,6 @@ async function loadAgents() {
           try { const parsed = iface.parseLog(log); tokenIds.push(parsed.args.tokenId.toString()); } catch{}
         }
       } catch {}
-    }
-
-    // Hardcode for this wallet
-    if (user.toLowerCase() === "0x15dc3c8131a351f307ca5eb04d227ea0fe01ac71") {
-      if (!tokenIds.includes("286241")) tokenIds.push("286241");
     }
 
     if (!tokenIds.length) { $("agentList").innerHTML='<p class="empty">No agents found. Try forging one above.</p>'; return; }
@@ -975,7 +1021,7 @@ function trLog(msg, cls="t") {
 
 async function pythFetch() {
   try {
-    const r = await fetch(`${HERMES}/v2/updates/price/latest?ids[]=${EUR_USD_FEED}`);
+    const r = await timedFetch(`${HERMES}/v2/updates/price/latest?ids[]=${EUR_USD_FEED}`, 10000, "Pyth price feed");
     const d = await r.json();
     const p = d.parsed[0].price;
     const price = Number(p.price) * Math.pow(10, p.expo);
